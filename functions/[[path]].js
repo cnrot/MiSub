@@ -606,14 +606,36 @@ async function handleMisubRequest(context) {
     }
     if (!targetFormat) {
         const ua = userAgentHeader.toLowerCase();
-        const uaMapping = {
-            'clash': 'clash', 'meta': 'clash', 'stash': 'clash', 'nekoray': 'clash',
-            'sing-box': 'singbox', 'shadowrocket': 'base64', 'v2rayn': 'base64',
-            'v2rayng': 'base64', 'surge': 'surge', 'loon': 'loon',
-            'quantumult%20x': 'quanx', 'quantumult': 'quanx',
-        };
-        for (const key in uaMapping) {
-            if (ua.includes(key)) { targetFormat = uaMapping[key]; break; }
+        // 使用陣列來保證比對的優先順序
+        const uaMapping = [
+            // 優先匹配 Mihomo/Meta 核心的客戶端
+            ['flyclash', 'clash'],
+            ['mihomo', 'clash'],
+            ['clash.meta', 'clash'],
+            ['clash-verge', 'clash'],
+            ['meta', 'clash'],
+            
+            // 其他客戶端
+            ['stash', 'clash'],
+            ['nekoray', 'clash'],
+            ['sing-box', 'singbox'],
+            ['shadowrocket', 'base64'],
+            ['v2rayn', 'base64'],
+            ['v2rayng', 'base64'],
+            ['surge', 'surge'],
+            ['loon', 'loon'],
+            ['quantumult%20x', 'quanx'],
+            ['quantumult', 'quanx'],
+
+            // 最後才匹配通用的 clash，作為向下相容
+            ['clash', 'clash']
+        ];
+
+        for (const [keyword, format] of uaMapping) {
+            if (ua.includes(keyword)) {
+                targetFormat = format;
+                break; // 找到第一個符合的就停止
+            }
         }
     }
     if (!targetFormat) { targetFormat = 'clash'; }
@@ -660,7 +682,7 @@ async function handleMisubRequest(context) {
     const subconverterUrl = new URL(`https://${effectiveSubConverter}/sub`);
     subconverterUrl.searchParams.set('target', targetFormat);
     subconverterUrl.searchParams.set('url', callbackUrl);
-    if (targetFormat === 'clash' && effectiveSubConfig && effectiveSubConfig.trim() !== '') {
+    if ((targetFormat === 'clash' || targetFormat === 'loon') && effectiveSubConfig && effectiveSubConfig.trim() !== '') {
         subconverterUrl.searchParams.set('config', effectiveSubConfig);
     }
     subconverterUrl.searchParams.set('new_name', 'true');
