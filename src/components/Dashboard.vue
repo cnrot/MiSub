@@ -205,7 +205,7 @@ const handleBulkImport = (importText) => {
       const newItem = { id: crypto.randomUUID(), name: extractNodeName(line) || '未命名', url: line, enabled: true, status: 'unchecked' };
       if (/^https?:\/\//.test(line)) {
           newSubs.push(newItem);
-      } else if (/^(ss|ssr|vmess|vless|trojan|hysteria2?|hy|hy2|tuic|anytls):\/\//.test(line)) {
+      } else if (/^(ss|ssr|vmess|vless|trojan|hysteria2?|hy|hy2|tuic|anytls|socks5):\/\//.test(line)) {
           newNodes.push(newItem);
       }
   }
@@ -275,7 +275,7 @@ const handleProfileToggle = (updatedProfile) => {
 };
 const handleAddProfile = () => {
     isNewProfile.value = true;
-    editingProfile.value = { name: '', enabled: true, subscriptions: [], manualNodes: [], customId: '', subConverter: '', subConfig: ''};
+    editingProfile.value = { name: '', enabled: true, subscriptions: [], manualNodes: [], customId: '', subConverter: '', subConfig: '', expiresAt: ''};
     showProfileModal.value = true;
 };
 const handleEditProfile = (profileId) => {
@@ -283,6 +283,7 @@ const handleEditProfile = (profileId) => {
     if (profile) {
         isNewProfile.value = false;
         editingProfile.value = JSON.parse(JSON.stringify(profile));
+        editingProfile.value.expiresAt = profile.expiresAt || ''; // Ensure expiresAt is copied
         showProfileModal.value = true;
     }
 };
