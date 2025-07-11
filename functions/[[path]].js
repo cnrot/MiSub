@@ -555,19 +555,89 @@ async function generateCombinedNodeList(context, config, userAgent, misubs, prep
             } catch (e) {}
             let validNodes = text.replace(/\r\n/g, '\n').split('\n')
                 .map(line => line.trim()).filter(line => nodeRegex.test(line));
-            // 新增：根据 exclude 规则过滤节点
+
+            // [核心重構] 引入白名單 (keep:) 和黑名單 (exclude) 模式
             if (sub.exclude && sub.exclude.trim() !== '') {
-                try {
-                    const regex = new RegExp(sub.exclude.trim(), 'i');
-                    validNodes = validNodes.filter(nodeLink => {
-                        const hashIndex = nodeLink.lastIndexOf('#');
-                        if (hashIndex === -1) return true; // 没有节点名称，无法过滤，保留
-                        const nodeName = decodeURIComponent(nodeLink.substring(hashIndex + 1));
-                        return !regex.test(nodeName);
+                const rules = sub.exclude.trim().split('\n').map(r => r.trim()).filter(Boolean);
+                
+                const keepRules = rules.filter(r => r.toLowerCase().startsWith('keep:'));
+
+                if (keepRules.length > 0) {
+                    // --- 白名單模式 (Inclusion Mode) ---
+                    const nameRegexParts = [];
+                    const protocolsToKeep = new Set();
+
+                    keepRules.forEach(rule => {
+                        const content = rule.substring('keep:'.length).trim();
+                        if (content.toLowerCase().startsWith('proto:')) {
+                            const protocols = content.substring('proto:'.length).split(',').map(p => p.trim().toLowerCase());
+                            protocols.forEach(p => protocolsToKeep.add(p));
+                        } else {
+                            nameRegexParts.push(content);
+                        }
                     });
-                } catch (e) {
-                    console.error(`Invalid regex for subscription ${sub.name}: ${sub.exclude}`, e);
-                    // 正则表达式无效时，不进行过滤，保留所有节点
+
+                    const nameRegex = nameRegexParts.length > 0 ? new RegExp(nameRegexParts.join('|'), 'i') : null;
+                    
+                    validNodes = validNodes.filter(nodeLink => {
+                        // 檢查協議是否匹配
+                        const protocolMatch = nodeLink.match(/^(.*?):\/\//);
+                        const protocol = protocolMatch ? protocolMatch[1].toLowerCase() : '';
+                        if (protocolsToKeep.has(protocol)) {
+                            return true;
+                        }
+
+                        // 檢查名稱是否匹配
+                        if (nameRegex) {
+                            const hashIndex = nodeLink.lastIndexOf('#');
+                            if (hashIndex !== -1) {
+                                try {
+                                    const nodeName = decodeURIComponent(nodeLink.substring(hashIndex + 1));
+                                    if (nameRegex.test(nodeName)) {
+                                        return true;
+                                    }
+                                } catch (e) { /* 忽略解碼錯誤 */ }
+                            }
+                        }
+                        return false; // 白名單模式下，不匹配任何規則則排除
+                    });
+
+                } else {
+                    // --- 黑名單模式 (Exclusion Mode) ---
+                    const protocolsToExclude = new Set();
+                    const nameRegexParts = [];
+
+                    rules.forEach(rule => {
+                        if (rule.toLowerCase().startsWith('proto:')) {
+                            const protocols = rule.substring('proto:'.length).split(',').map(p => p.trim().toLowerCase());
+                            protocols.forEach(p => protocolsToExclude.add(p));
+                        } else {
+                            nameRegexParts.push(rule);
+                        }
+                    });
+                    
+                    const nameRegex = nameRegexParts.length > 0 ? new RegExp(nameRegexParts.join('|'), 'i') : null;
+
+                    validNodes = validNodes.filter(nodeLink => {
+                        const protocolMatch = nodeLink.match(/^(.*?):\/\//);
+                        const protocol = protocolMatch ? protocolMatch[1].toLowerCase() : '';
+                        if (protocolsToExclude.has(protocol)) {
+                            return false;
+                        }
+
+                        if (nameRegex) {
+                            const hashIndex = nodeLink.lastIndexOf('#');
+                            if (hashIndex !== -1) {
+                                try {
+                                    const nodeName = decodeURIComponent(nodeLink.substring(hashIndex + 1));
+                                    if (nameRegex.test(nodeName)) {
+                                        return false;
+                                    }
+                                } catch (e) { /* 忽略解碼錯誤 */ }
+                            }
+                        }
+                        return true;
+                    });
                 }
             }
             return (config.prependSubName && sub.name)
@@ -766,7 +836,7 @@ async function handleMisubRequest(context) {
     const subconverterUrl = new URL(`https://${effectiveSubConverter}/sub`);
     subconverterUrl.searchParams.set('target', targetFormat);
     subconverterUrl.searchParams.set('url', callbackUrl);
-    if ((targetFormat === 'clash' || targetFormat === 'loon') && effectiveSubConfig && effectiveSubConfig.trim() !== '') {
+    if ((targetFormat === 'clash' || targetFormat === 'loon' || targetFormat === 'surge') && effectiveSubConfig && effectiveSubConfig.trim() !== '') {
         subconverterUrl.searchParams.set('config', effectiveSubConfig);
     }
     subconverterUrl.searchParams.set('new_name', 'true');

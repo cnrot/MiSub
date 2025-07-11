@@ -46,6 +46,8 @@ const {
   addNodesFromBulk, autoSortNodes, deduplicateNodes,
 } = useManualNodes(initialNodes, markDirty);
 
+const manualNodesPerPage = 24;
+
 // --- 訂閱組 (Profile) 相關狀態 ---
 const profiles = ref([]);
 const config = ref({});
@@ -515,9 +517,10 @@ const formattedTotalRemainingTraffic = computed(() => formatBytes(totalRemaining
 
             <div v-if="manualNodeViewMode === 'list'" class="space-y-2">
                 <ManualNodeList
-                    v-for="node in paginatedManualNodes"
+                    v-for="(node, index) in paginatedManualNodes"
                     :key="node.id"
                     :node="node"
+                    :index="(manualNodesCurrentPage - 1) * manualNodesPerPage + index + 1"
                     @edit="handleEditNode(node.id)"
                     @delete="handleDeleteNodeWithCleanup(node.id)"
                 />
@@ -603,8 +606,15 @@ const formattedTotalRemainingTraffic = computed(() => formatBytes(totalRemaining
         <div><label for="sub-edit-name" class="block text-sm font-medium text-gray-700 dark:text-gray-300">订阅名称</label><input type="text" id="sub-edit-name" v-model="editingSubscription.name" placeholder="（可选）不填将自动获取" class="mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:text-white"></div>
         <div><label for="sub-edit-url" class="block text-sm font-medium text-gray-700 dark:text-gray-300">订阅链接</label><input type="text" id="sub-edit-url" v-model="editingSubscription.url" placeholder="https://..." class="mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono dark:text-white"></div>
         <div>
-          <label for="sub-edit-exclude" class="block text-sm font-medium text-gray-700 dark:text-gray-300">排除节点 (正则表达式)</label>
-          <textarea id="sub-edit-exclude" v-model="editingSubscription.exclude" placeholder="输入需要排除的节点名称的正则表达式，例如：(过期|官网)" rows="3" class="mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono dark:text-white"></textarea>
+          <label for="sub-edit-exclude" class="block text-sm font-medium text-gray-700 dark:text-gray-300">包含/排除节点</label>
+          <textarea 
+            id="sub-edit-exclude" 
+            v-model="editingSubscription.exclude"
+            placeholder="[排除模式 (默认)]&#10;proto:vless,trojan&#10;(过期|官网)&#10;---&#10;[包含模式 (只保留匹配项)]&#10;keep:(香港|HK)&#10;keep:proto:ss"
+            rows="5" 
+            class="mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono dark:text-white">
+          </textarea>
+          <p class="text-xs text-gray-400 mt-1">每行一条规则。使用 `keep:` 切换为白名单模式。</p>
         </div>
       </div>
     </template>
