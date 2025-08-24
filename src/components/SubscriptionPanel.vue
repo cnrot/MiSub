@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import draggable from 'vuedraggable';
 import Card from './Card.vue';
 
@@ -30,6 +30,21 @@ const handleDeleteAll = () => {
   emit('deleteAll');
   showSubsMoreMenu.value = false;
 }
+
+// 添加点击外部关闭下拉菜单的功能
+const handleClickOutside = (event) => {
+  if (subsMoreMenuRef.value && !subsMoreMenuRef.value.contains(event.target)) {
+    showSubsMoreMenu.value = false;
+  }
+};
+
+onMounted(() => {
+  document.addEventListener('click', handleClickOutside);
+});
+
+onUnmounted(() => {
+  document.removeEventListener('click', handleClickOutside);
+});
 </script>
 
 <template>
@@ -78,7 +93,12 @@ const handleDeleteAll = () => {
         </template>
       </draggable>
       <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-5">
-          <div v-for="subscription in paginatedSubscriptions" :key="subscription.id">
+          <div 
+              v-for="(subscription, index) in paginatedSubscriptions"
+              :key="subscription.id"
+              class="list-item-animation"
+              :style="{ '--delay-index': index }"
+          >   
               <Card 
                   :misub="subscription" 
                   @delete="handleDelete(subscription.id)" 

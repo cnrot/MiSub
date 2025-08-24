@@ -46,7 +46,16 @@ const formatBytes = (bytes, decimals = 2) => {
 
 const trafficInfo = computed(() => {
   const info = props.misub.userInfo;
-  if (!info || info.total === undefined || info.download === undefined || info.upload === undefined) return null;
+  const REASONABLE_TRAFFIC_LIMIT_BYTES = 10 * 1024 * 1024 * 1024 * 1024 * 1024; // 10 PB
+  if (
+    !info ||
+    info.total === undefined ||
+    info.download === undefined ||
+    info.upload === undefined ||
+    info.total >= REASONABLE_TRAFFIC_LIMIT_BYTES
+  ) {
+    return null;
+  }  
   const total = info.total;
   const used = info.download + info.upload;
   const percentage = total > 0 ? Math.min((used / total) * 100, 100) : 0;
@@ -60,17 +69,21 @@ const trafficInfo = computed(() => {
 const expiryInfo = computed(() => {
     const expireTimestamp = props.misub.userInfo?.expire;
     if (!expireTimestamp) return null;
+    const REASONABLE_EXPIRY_LIMIT_DAYS = 365 * 10;
     const expiryDate = new Date(expireTimestamp * 1000);
     const now = new Date();
     expiryDate.setHours(0, 0, 0, 0);
     now.setHours(0, 0, 0, 0);
     const diffDays = Math.ceil((expiryDate - now) / (1000 * 60 * 60 * 24));
+    if (diffDays > REASONABLE_EXPIRY_LIMIT_DAYS) {
+        return null;
+    }  
     let style = 'text-gray-500 dark:text-gray-400';
     if (diffDays < 0) style = 'text-red-500 font-bold';
     else if (diffDays <= 7) style = 'text-yellow-500 font-semibold';
     return {
         date: expiryDate.toLocaleDateString(),
-        daysRemaining: diffDays < 0 ? '已過期' : (diffDays === 0 ? '今天到期' : `${diffDays} 天后`),
+        daysRemaining: diffDays < 0 ? '已过期' : (diffDays === 0 ? '今天到期' : `${diffDays} 天后`),
         style: style
     };
 });
@@ -93,7 +106,7 @@ const expiryInfo = computed(() => {
         </p>
       </div>
       
-      <div class="shrink-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+        <div class="shrink-0 flex items-center gap-1 lg:opacity-0 group-hover:opacity-100 transition-opacity duration-200">
           <button @click="emit('edit')" class="p-1.5 rounded-full hover:bg-gray-500/10 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200" title="编辑"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.536L16.732 3.732z" /></svg></button>
           <button @click="emit('delete')" class="p-1.5 rounded-full hover:bg-red-500/10 text-gray-400 hover:text-red-500" title="删除"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
       </div>

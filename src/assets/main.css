@@ -35,7 +35,7 @@
   html.dark,
   html.dark body,
   html.dark #app {
-    background-color: #030712; /* 深灰色 */
+    background-color: #0A0F1F; /* 深灰蓝 */
   }
 }
 
@@ -44,6 +44,22 @@
 body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+.list-item-animation {
+  /* 初始状态：向上移动一点点并且透明 */
+  transform: translateY(20px);
+  opacity: 0;
+  /* 动画定义：使用 calc() 和 CSS 变量来创建交错延迟 */
+  animation: slide-up 0.4s ease-out forwards;
+  animation-delay: calc(var(--delay-index) * 50ms); /* 核心：每个卡片的延迟时间 = 索引 * 50毫秒 */
+}
+
+@keyframes slide-up {
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
 /* 自定义滚动条样式，使其与主题匹配 */
@@ -70,4 +86,37 @@ button {
 button:active {
     /* 点击时轻微缩放，提供物理反馈 */
     transform: scale(0.95);
+    /* 新增：点击时稍微变暗，增强物理反馈感 */
+    filter: brightness(0.95);
+}
+
+/* 移动端优化 */
+@media (max-width: 768px) {
+  /* 确保移动端的按钮有足够的点击区域 */
+  button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  /* 移动端的卡片按钮组更容易操作 */
+  .shrink-0.flex.items-center.gap-1 {
+    gap: 0.5rem;
+  }
+  
+  /* 移动端的按钮图标稍微大一点 */
+  .shrink-0.flex.items-center.gap-1 svg {
+    width: 1.25rem;
+    height: 1.25rem;
+  }
+  
+  /* 移动端下拉菜单优化 */
+  .absolute.mt-2 {
+    z-index: 50;
+    min-width: 120px;
+  }
+  
+  /* 移动端搜索框优化 */
+  input[type="text"] {
+    font-size: 16px; /* 防止iOS缩放 */
+  }
 }
