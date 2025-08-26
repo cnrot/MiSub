@@ -51,7 +51,8 @@ async function conditionalKVPut(env, key, newData, oldData = null) {
             oldData = await env.MISUB_KV.get(key, 'json');
         } catch (error) {
             console.warn(`Failed to read old data for key ${key}:`, error);
-            // 读取失败时，为安全起见执行写入
+            // 读取失败时，为安全起见执行写入，但记录警告
+            console.warn(`[KV Optimized] Performing write without comparison due to read failure for key ${key}`);
             await env.MISUB_KV.put(key, JSON.stringify(newData));
             return true;
         }
@@ -121,6 +122,12 @@ class BatchWriteManager {
         const writeTask = this.writeQueue.get(key);
         if (!writeTask) return;
 
+        // 清理定时器
+        if (this.debounceTimers.has(key)) {
+            clearTimeout(this.debounceTimers.get(key));
+            this.debounceTimers.delete(key);
+        }
+
         try {
             const wasWritten = await conditionalKVPut(env, key, writeTask.data, writeTask.oldData);
             writeTask.resolve(wasWritten);
@@ -129,9 +136,8 @@ class BatchWriteManager {
             console.error(`[Batch Write] Failed to write key ${key}:`, error);
             writeTask.reject(error);
         } finally {
-            // 清理
+            // 清理队列
             this.writeQueue.delete(key);
-            this.debounceTimers.delete(key);
         }
     }
 
@@ -230,6 +236,7 @@ async function handleCronTrigger(env) {
     const settings = await storageAdapter.get(KV_KEY_SETTINGS) || defaultSettings;
 
     const nodeRegex = /^(ss|ssr|vmess|vless|trojan|hysteria2?|hy|hy2|tuic|anytls|socks5):\/\//gm;
+    let changesMade = false; // 修复: 声明changesMade变量
 
     for (const sub of allSubs) {
         if (sub.url.startsWith('http') && sub.enabled) {
@@ -638,7 +645,7 @@ async function handleApiRequest(request, env) {
                         const text = await nodeCountResponse.text();
                         let decoded = '';
                         try { decoded = atob(text.replace(/\s/g, '')); } catch { decoded = text; }
-                        const lineMatches = decoded.match(/^(ss|ssr|vmess|vless|trojan|hysteria2?|hy|hy2|tuic|anytls):\/\//gm);
+                        const lineMatches = decoded.match(/^(ss|ssr|vmess|vless|trojan|hysteria2?|hy|hy2|tuic|anytls|socks5):\/\//gm);
                         if (lineMatches) {
                             result.count = lineMatches.length;
                         }
@@ -861,6 +868,23 @@ function prependNodeName(link, prefix) {
   return appendToFragment(link, prefix);
 }
 
+/**
+ * 根据客户端类型确定合适的用户代理
+ * @param {string} originalUserAgent - 原始用户代理字符串
+ * @returns {string} - 处理后的用户代理字符串
+ */
+function getProcessedUserAgent(originalUserAgent) {
+    const ua = originalUserAgent.toLowerCase();
+    
+    // 检测需要设置为 clash-verge/v2.3.1 的客户端
+    if (ua.includes('clash-verge') || ua.includes('mihomo') || ua.includes('shellcrash')) {
+        return 'clash-verge/v2.3.1';
+    }
+    
+    // 其他客户端保持原始用户代理
+    return originalUserAgent;
+}
+
 // --- 节点列表生成函数 ---
 async function generateCombinedNodeList(context, config, userAgent, misubs, prependedContent = '') {
     const nodeRegex = /^(ss|ssr|vmess|vless|trojan|hysteria2?|hy|hy2|tuic|anytls|socks5):\/\//;
@@ -875,7 +899,9 @@ async function generateCombinedNodeList(context, config, userAgent, misubs, prep
     const httpSubs = misubs.filter(sub => sub.url.toLowerCase().startsWith('http'));
     const subPromises = httpSubs.map(async (sub) => {
         try {
-            const requestHeaders = { 'User-Agent': userAgent };
+            // 使用处理后的用户代理
+            const processedUserAgent = getProcessedUserAgent(userAgent);
+            const requestHeaders = { 'User-Agent': processedUserAgent };
             const response = await Promise.race([
                 fetch(new Request(sub.url, { headers: requestHeaders, redirect: "follow", cf: { insecureSkipVerify: true } })),
                 new Promise((_, reject) => setTimeout(() => reject(new Error('Request timed out')), 10000))
