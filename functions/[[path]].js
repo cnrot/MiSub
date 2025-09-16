@@ -188,6 +188,38 @@ async function getStorageAdapter(env) {
     return StorageFactory.createAdapter(env, storageType);
 }
 
+/**
+ * 处理配置的向后兼容性，确保新的前缀配置结构存在
+ * @param {Object} config - 原始配置对象
+ * @returns {Object} - 处理后的配置对象
+ */
+function migrateConfigSettings(config) {
+    const migratedConfig = { ...config };
+    
+    // 如果没有新的 prefixConfig，但有老的 prependSubName，则创建默认的 prefixConfig
+    if (!migratedConfig.prefixConfig) {
+        const fallbackEnabled = migratedConfig.prependSubName ?? true;
+        migratedConfig.prefixConfig = {
+            enableManualNodes: fallbackEnabled,
+            enableSubscriptions: fallbackEnabled,
+            manualNodePrefix: '手动节点'
+        };
+    }
+    
+    // 确保 prefixConfig 的所有字段都存在
+    if (!migratedConfig.prefixConfig.hasOwnProperty('enableManualNodes')) {
+        migratedConfig.prefixConfig.enableManualNodes = migratedConfig.prependSubName ?? true;
+    }
+    if (!migratedConfig.prefixConfig.hasOwnProperty('enableSubscriptions')) {
+        migratedConfig.prefixConfig.enableSubscriptions = migratedConfig.prependSubName ?? true;
+    }
+    if (!migratedConfig.prefixConfig.hasOwnProperty('manualNodePrefix')) {
+        migratedConfig.prefixConfig.manualNodePrefix = '手动节点';
+    }
+    
+    return migratedConfig;
+}
+
 // --- [新] 默认设置中增加通知阈值和存储类型 ---
 const defaultSettings = {
   FileName: 'MiSub',
@@ -195,7 +227,12 @@ const defaultSettings = {
   profileToken: 'profiles',
   subConverter: 'url.v1.mk',
   subConfig: 'https://raw.githubusercontent.com/cmliu/ACL4SSR/refs/heads/main/Clash/config/ACL4SSR_Online_Full.ini',
-  prependSubName: true,
+  prependSubName: true, // 保持向后兼容
+  prefixConfig: {
+    enableManualNodes: true,    // 手动节点前缀开关
+    enableSubscriptions: true,  // 机场订阅前缀开关
+    manualNodePrefix: '手动节点', // 手动节点前缀文本
+  },
   NotifyThresholdDays: 3,
   NotifyThresholdPercent: 90,
   storageType: 'kv' // 新增：数据存储类型，默认 KV，可选 'd1'
@@ -273,7 +310,11 @@ async function sendEnhancedTgNotification(settings, type, clientIp, additionalDa
     if (response.ok) {
       const ipInfo = await response.json();
       if (ipInfo.status === 'success') {
-        locationInfo = `\n*国家:* \`${ipInfo.country || 'N/A'}\`\n*城市:* \`${ipInfo.city || 'N/A'}\`\n*ISP:* \`${ipInfo.org || 'N/A'}\`\n*ASN:* \`${ipInfo.as || 'N/A'}\``;
+        locationInfo = `
+*国家:* \`${ipInfo.country || 'N/A'}\`
+*城市:* \`${ipInfo.city || 'N/A'}\`
+*ISP:* \`${ipInfo.org || 'N/A'}\`
+*ASN:* \`${ipInfo.as || 'N/A'}\``;
       }
     }
   } catch (error) {
@@ -282,7 +323,13 @@ async function sendEnhancedTgNotification(settings, type, clientIp, additionalDa
   
   // 构建完整消息
   const now = new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
-  const message = `${type}\n\n*IP 地址:* \`${clientIp}\`${locationInfo}\n\n${additionalData}\n\n*时间:* \`${now} (UTC+8)\``;
+  const message = `${type}
+
+*IP 地址:* \`${clientIp}\`${locationInfo}
+
+${additionalData}
+
+*时间:* \`${now} (UTC+8)\``;
   
   const url = `https://api.telegram.org/bot${settings.BotToken}/sendMessage`;
   const payload = { 
@@ -428,7 +475,11 @@ async function checkAndNotify(sub, settings, env) {
         if (daysRemaining <= (settings.NotifyThresholdDays || 7)) {
             // 检查上次通知时间，防止24小时内重复通知
             if (!sub.lastNotifiedExpire || (now - sub.lastNotifiedExpire > ONE_DAY_MS)) {
-                const message = `🗓️ *订阅临期提醒* 🗓️\n\n*订阅名称:* \`${sub.name || '未命名'}\`\n*状态:* \`${daysRemaining < 0 ? '已过期' : `仅剩 ${daysRemaining} 天到期`}\`\n*到期日期:* \`${expiryDate.toLocaleDateString('zh-CN')}\``;
+                const message = `🗓️ *订阅临期提醒* 🗓️
+
+*订阅名称:* \`${sub.name || '未命名'}\`
+*状态:* \`${daysRemaining < 0 ? '已过期' : `仅剩 ${daysRemaining} 天到期`}\`
+*到期日期:* \`${expiryDate.toLocaleDateString('zh-CN')}\``;
                 const sent = await sendTgNotification(settings, message);
                 if (sent) {
                     sub.lastNotifiedExpire = now; // 更新通知时间戳
@@ -455,7 +506,11 @@ async function checkAndNotify(sub, settings, env) {
                     return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
                 };
                 
-                const message = `📈 *流量预警提醒* 📈\n\n*订阅名称:* \`${sub.name || '未命名'}\`\n*状态:* \`已使用 ${usagePercent}%\`\n*详情:* \`${formatBytes(used)} / ${formatBytes(total)}\``;
+                const message = `📈 *流量预警提醒* 📈
+
+*订阅名称:* \`${sub.name || '未命名'}\`
+*状态:* \`已使用 ${usagePercent}%\`
+*详情:* \`${formatBytes(used)} / ${formatBytes(total)}\``;
                 const sent = await sendTgNotification(settings, message);
                 if (sent) {
                     sub.lastNotifiedTraffic = now; // 更新通知时间戳
@@ -859,6 +914,128 @@ async function handleApiRequest(request, env) {
             }
         }
 
+        case '/debug_subscription': {
+            if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405 });
+            
+            try {
+                const { url: debugUrl, userAgent } = await request.json();
+                if (!debugUrl || typeof debugUrl !== 'string' || !/^https?:\/\//.test(debugUrl)) {
+                    return new Response(JSON.stringify({ error: 'Invalid or missing url' }), { status: 400 });
+                }
+                
+                const result = {
+                    url: debugUrl,
+                    userAgent: userAgent || 'MiSub-Debug/1.0',
+                    success: false,
+                    rawContent: '',
+                    processedContent: '',
+                    validNodes: [],
+                    ssNodes: [],
+                    error: null
+                };
+                
+                try {
+                    const response = await fetch(new Request(debugUrl, {
+                        headers: { 'User-Agent': result.userAgent },
+                        redirect: "follow",
+                        cf: { insecureSkipVerify: true }
+                    }));
+                    
+                    if (!response.ok) {
+                        result.error = `HTTP ${response.status}: ${response.statusText}`;
+                        return new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } });
+                    }
+                    
+                    const text = await response.text();
+                    result.rawContent = text.substring(0, 2000); // 限制原始内容长度
+                    
+                    // 处理Base64解码
+                    let processedText = text;
+                    try {
+                        const cleanedText = text.replace(/\s/g, '');
+                        if (isValidBase64(cleanedText)) {
+                            const binaryString = atob(cleanedText);
+                            const bytes = new Uint8Array(binaryString.length);
+                            for (let i = 0; i < binaryString.length; i++) { bytes[i] = binaryString.charCodeAt(i); }
+                            processedText = new TextDecoder('utf-8').decode(bytes);
+                        }
+                    } catch (e) {
+                        // Base64解码失败，使用原始内容
+                    }
+                    
+                    result.processedContent = processedText.substring(0, 2000); // 限制处理后内容长度
+                    
+                    // 提取所有有效节点
+                    const allNodes = processedText.replace(/\r\n/g, '\n').split('\n')
+                        .map(line => line.trim())
+                        .filter(line => /^(ss|ssr|vmess|vless|trojan|hysteria2?|hy|hy2|tuic|anytls|socks5):\/\//.test(line));
+                    
+                    result.validNodes = allNodes.slice(0, 20); // 限制显示节点数量
+                    
+                    // 特别提取SS节点进行分析
+                    result.ssNodes = allNodes.filter(line => line.startsWith('ss://')).map(line => {
+                        try {
+                            const hashIndex = line.indexOf('#');
+                            let baseLink = hashIndex !== -1 ? line.substring(0, hashIndex) : line;
+                            let fragment = hashIndex !== -1 ? line.substring(hashIndex) : '';
+                            
+                            const protocolEnd = baseLink.indexOf('://');
+                            const atIndex = baseLink.indexOf('@');
+                            let analysis = {
+                                original: line,
+                                hasUrlEncoding: false,
+                                fixed: line,
+                                base64Part: '',
+                                credentials: ''
+                            };
+                            
+                            if (protocolEnd !== -1 && atIndex !== -1) {
+                                const base64Part = baseLink.substring(protocolEnd + 3, atIndex);
+                                analysis.base64Part = base64Part;
+                                
+                                if (base64Part.includes('%')) {
+                                    analysis.hasUrlEncoding = true;
+                                    const decodedBase64 = decodeURIComponent(base64Part);
+                                    analysis.fixed = 'ss://' + decodedBase64 + baseLink.substring(atIndex) + fragment;
+                                    
+                                    try {
+                                        analysis.credentials = atob(decodedBase64);
+                                    } catch (e) {
+                                        analysis.credentials = 'Base64解码失败: ' + e.message;
+                                    }
+                                } else {
+                                    try {
+                                        analysis.credentials = atob(base64Part);
+                                    } catch (e) {
+                                        analysis.credentials = 'Base64解码失败: ' + e.message;
+                                    }
+                                }
+                            }
+                            
+                            return analysis;
+                        } catch (e) {
+                            return {
+                                original: line,
+                                error: e.message
+                            };
+                        }
+                    }).slice(0, 10); // 限制SS节点分析数量
+                    
+                    result.success = true;
+                    result.totalNodes = allNodes.length;
+                    result.ssNodesCount = allNodes.filter(line => line.startsWith('ss://')).length;
+                    
+                } catch (e) {
+                    result.error = e.message;
+                }
+                
+                return new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } });
+                
+            } catch (e) {
+                return new Response(JSON.stringify({ error: `调试失败: ${e.message}` }), { status: 500 });
+            }
+        }
+
         case '/settings': {
             if (request.method === 'GET') {
                 try {
@@ -959,13 +1136,49 @@ function getProcessedUserAgent(originalUserAgent, url = '') {
 }
 
 // --- 节点列表生成函数 ---
-async function generateCombinedNodeList(context, config, userAgent, misubs, prependedContent = '') {
+async function generateCombinedNodeList(context, config, userAgent, misubs, prependedContent = '', profilePrefixSettings = null) {
     const nodeRegex = /^(ss|ssr|vmess|vless|trojan|hysteria2?|hy|hy2|tuic|anytls|socks5):\/\//g;
+    
+    // 判断是否启用手动节点前缀
+    const shouldPrependManualNodes = profilePrefixSettings?.enableManualNodes ?? 
+        config.prefixConfig?.enableManualNodes ?? 
+        config.prependSubName ?? true;
+    
+    // 手动节点前缀文本
+    const manualNodePrefix = profilePrefixSettings?.manualNodePrefix ?? 
+        config.prefixConfig?.manualNodePrefix ?? 
+        '手动节点';
+    
     const processedManualNodes = misubs.filter(sub => !sub.url.toLowerCase().startsWith('http')).map(node => {
         if (node.isExpiredNode) {
             return node.url; // Directly use the URL for expired node
         } else {
-            return (config.prependSubName) ? prependNodeName(node.url, '手动节点') : node.url;
+            // 修复手动SS节点中的URL编码问题
+            let processedUrl = node.url;
+            if (processedUrl.startsWith('ss://')) {
+                try {
+                    const hashIndex = processedUrl.indexOf('#');
+                    let baseLink = hashIndex !== -1 ? processedUrl.substring(0, hashIndex) : processedUrl;
+                    let fragment = hashIndex !== -1 ? processedUrl.substring(hashIndex) : '';
+                    
+                    // 检查base64部分是否包含URL编码字符
+                    const protocolEnd = baseLink.indexOf('://');
+                    const atIndex = baseLink.indexOf('@');
+                    if (protocolEnd !== -1 && atIndex !== -1) {
+                        const base64Part = baseLink.substring(protocolEnd + 3, atIndex);
+                        if (base64Part.includes('%')) {
+                            // 解码URL编码的base64部分
+                            const decodedBase64 = decodeURIComponent(base64Part);
+                            baseLink = 'ss://' + decodedBase64 + baseLink.substring(atIndex);
+                        }
+                    }
+                    processedUrl = baseLink + fragment;
+                } catch (e) {
+                    // 如果处理失败，使用原始链接
+                }
+            }
+            
+            return shouldPrependManualNodes ? prependNodeName(processedUrl, manualNodePrefix) : processedUrl;
         }
     }).join('\n');
 
@@ -1013,7 +1226,35 @@ async function generateCombinedNodeList(context, config, userAgent, misubs, prep
                 // Base64解码失败，使用原始内容
             }
             let validNodes = text.replace(/\r\n/g, '\n').split('\n')
-                .map(line => line.trim()).filter(line => /^(ss|ssr|vmess|vless|trojan|hysteria2?|hy|hy2|tuic|anytls|socks5):\/\//.test(line));
+                .map(line => line.trim())
+                .filter(line => /^(ss|ssr|vmess|vless|trojan|hysteria2?|hy|hy2|tuic|anytls|socks5):\/\//.test(line))
+                .map(line => {
+                    // 修复SS节点中的URL编码问题
+                    if (line.startsWith('ss://')) {
+                        try {
+                            const hashIndex = line.indexOf('#');
+                            let baseLink = hashIndex !== -1 ? line.substring(0, hashIndex) : line;
+                            let fragment = hashIndex !== -1 ? line.substring(hashIndex) : '';
+                            
+                            // 检查base64部分是否包含URL编码字符
+                            const protocolEnd = baseLink.indexOf('://');
+                            const atIndex = baseLink.indexOf('@');
+                            if (protocolEnd !== -1 && atIndex !== -1) {
+                                const base64Part = baseLink.substring(protocolEnd + 3, atIndex);
+                                if (base64Part.includes('%')) {
+                                    // 解码URL编码的base64部分
+                                    const decodedBase64 = decodeURIComponent(base64Part);
+                                    baseLink = 'ss://' + decodedBase64 + baseLink.substring(atIndex);
+                                }
+                            }
+                            return baseLink + fragment;
+                        } catch (e) {
+                            // 如果处理失败，返回原始链接
+                            return line;
+                        }
+                    }
+                    return line;
+                });
 
             // [核心重構] 引入白名單 (keep:) 和黑名單 (exclude) 模式
             if (sub.exclude && sub.exclude.trim() !== '') {
@@ -1100,7 +1341,12 @@ async function generateCombinedNodeList(context, config, userAgent, misubs, prep
                 }
             }
             
-            return (config.prependSubName && sub.name)
+            // 判断是否启用订阅前缀
+            const shouldPrependSubscriptions = profilePrefixSettings?.enableSubscriptions ?? 
+                config.prefixConfig?.enableSubscriptions ?? 
+                config.prependSubName ?? true;
+            
+            return (shouldPrependSubscriptions && sub.name)
                 ? validNodes.map(node => prependNodeName(node, sub.name)).join('\n')
                 : validNodes.join('\n');
         } catch (e) { 
@@ -1141,8 +1387,8 @@ async function handleMisubRequest(context) {
     const settings = settingsData || {};
     const allMisubs = misubsData || [];
     const allProfiles = profilesData || [];
-    // 關鍵：我們在這裡定義了 `config`，後續都應該使用它
-    const config = { ...defaultSettings, ...settings }; 
+    // 关键：我们在这里定义了 `config`，后续都应该使用它
+    const config = migrateConfigSettings({ ...defaultSettings, ...settings }); 
 
     let token = '';
     let profileIdentifier = null;
@@ -1309,7 +1555,14 @@ async function handleMisubRequest(context) {
         }
     }
 
-    const combinedNodeList = await generateCombinedNodeList(context, config, userAgentHeader, targetMisubs, prependedContentForSubconverter);
+    const combinedNodeList = await generateCombinedNodeList(
+        context, 
+        config, 
+        userAgentHeader, 
+        targetMisubs, 
+        prependedContentForSubconverter,
+        profileIdentifier ? allProfiles.find(p => (p.customId && p.customId === profileIdentifier) || p.id === profileIdentifier)?.prefixSettings : null
+    );
 
     if (targetFormat === 'base64') {
         let contentToEncode;
