@@ -17,6 +17,10 @@ const props = defineProps({
   confirmButtonTitle: { // 用於在禁用時顯示提示
     type: String,
     default: '确认'
+  },
+  closeOnClickOutside: { // 控制是否允许点击空白区域关闭弹窗
+    type: Boolean,
+    default: false
   }
 });
 
