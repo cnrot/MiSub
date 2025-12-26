@@ -12,7 +12,7 @@ const props = defineProps({
   totalPages: Number,
 });
 
-const emit = defineEmits(['add', 'edit', 'delete', 'deleteAll', 'toggle', 'copyLink', 'preview', 'reorder', 'changePage']);
+const emit = defineEmits(['add', 'edit', 'delete', 'deleteAll', 'toggle', 'copyLink', 'preview', 'reorder', 'changePage', 'viewLogs']);
 
 // [FIX] Compute profiles to display: use paginated if available, else all profiles
 const displayProfiles = computed(() => {
@@ -93,12 +93,12 @@ onUnmounted(() => {
 
 <template>
   <div>
-    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-4 list-item-animation" style="--delay-index: 0">
+    <div class="flex flex-row items-center justify-between mb-4 gap-4 list-item-animation" style="--delay-index: 0">
       <div class="flex items-center gap-3">
         <h2 class="text-xl font-bold text-gray-900 dark:text-white">我的订阅组</h2>
         <span class="px-2.5 py-0.5 text-sm font-semibold text-gray-700 dark:text-gray-200 bg-gray-200 dark:bg-gray-700/50 rounded-full">{{ profiles.length }}</span>
       </div>
-      <div class="flex items-center gap-2 w-full sm:w-auto justify-end sm:justify-start">
+      <div class="flex items-center gap-2 sm:w-auto justify-end sm:justify-start">
         <button @click="handleAdd" class="text-sm font-semibold px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition-colors shadow-xs shrink-0">新增</button>
         <div class="relative shrink-0" ref="profilesMoreMenuRef">
           <button @click="showProfilesMoreMenu = !showProfilesMoreMenu" class="p-2.5 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
@@ -141,6 +141,7 @@ onUnmounted(() => {
           @preview="handlePreview(profile.id)"
           @move-up="handleMoveUp(index)"
           @move-down="handleMoveDown(index)"
+          @view-logs="emit('viewLogs', profile.id)"
         />
       </div>
       <div v-if="totalPages > 1 && paginatedProfiles && paginatedProfiles.length > 0" class="flex justify-center items-center space-x-4 mt-8 text-sm font-medium">

@@ -5,9 +5,10 @@
 
 import { StorageFactory } from '../storage-adapter.js';
 import { migrateConfigSettings, formatBytes, getCallbackToken } from './utils.js';
-import { generateCombinedNodeList } from './subscription.js';
+import { generateCombinedNodeList } from '../services/subscription-service.js';
 import { sendEnhancedTgNotification } from './notifications.js';
 import { KV_KEY_SUBS, KV_KEY_PROFILES, KV_KEY_SETTINGS, DEFAULT_SETTINGS as defaultSettings } from './config.js';
+import { renderDisguisePage } from './disguise-page.js';
 import {
     generateCacheKey,
     getCache,
@@ -37,6 +38,18 @@ export async function handleMisubRequest(context) {
     const allProfiles = profilesData || [];
     // 关键：我们在这里定义了 `config`，后续都应该使用它
     const config = migrateConfigSettings({ ...defaultSettings, ...settings });
+
+    // 伪装功能:检测浏览器访问
+    const isBrowser = /Mozilla|Chrome|Safari|Edge|Opera/i.test(userAgentHeader) &&
+        !/clash|v2ray|surge|loon|shadowrocket|quantumult|stash|shadowsocks/i.test(userAgentHeader);
+
+    if (config.disguise?.enabled && isBrowser) {
+        if (config.disguise.pageType === 'redirect' && config.disguise.redirectUrl) {
+            return Response.redirect(config.disguise.redirectUrl, 302);
+        } else {
+            return renderDisguisePage();
+        }
+    }
 
     let token = '';
     let profileIdentifier = null;
@@ -71,11 +84,11 @@ export async function handleMisubRequest(context) {
                     token = config.profileToken;
                 } else if (foundProfileFirst) {
                     // /ID/anything pattern
-                    profileIdentifier = firstSeg;
+                    profileIdentifier = firstSegment;
                     token = config.profileToken;
                 } else {
                     // Fallback to original behavior (likely invalid)
-                    token = firstSeg;
+                    token = firstSegment;
                     profileIdentifier = secondSeg;
                 }
             }
@@ -299,13 +312,24 @@ export async function handleMisubRequest(context) {
 
     // 定义刷新函数（用于后台刷新）
     const refreshNodes = async () => {
+        const isDebugToken = (token === 'b0b422857bb46aba65da8234c84f38c6');
+        // 组合节点列表
+        // 传递 context 对象以获取请求信息用于日志记录
+        context.startTime = Date.now();
+        const currentProfile = profileIdentifier ? allProfiles.find(p => (p.customId && p.customId === profileIdentifier) || p.id === profileIdentifier) : null;
+        const generationSettings = {
+            ...(currentProfile?.prefixSettings || {}),
+            name: subName
+        };
+
         const freshNodes = await generateCombinedNodeList(
-            context,
+            context, // 传入完整 context
             config,
             userAgentHeader,
             targetMisubs,
             prependedContentForSubconverter,
-            profileIdentifier ? allProfiles.find(p => (p.customId && p.customId === profileIdentifier) || p.id === profileIdentifier)?.prefixSettings : null
+            generationSettings,
+            isDebugToken
         );
         const sourceNames = targetMisubs
             .filter(s => s.url.startsWith('http'))

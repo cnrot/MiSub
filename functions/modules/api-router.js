@@ -165,6 +165,21 @@ export async function handleApiRequest(request, env) {
         case '/preview/content':
             return await handlePreviewContentRequest(request, env);
 
+        case '/logs':
+            if (request.method === 'GET') {
+                const { LogService } = await import('../services/log-service.js');
+                const logs = await LogService.getLogs(env);
+                return createJsonResponse({ success: true, data: logs }, 200, {
+                    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate'
+                });
+            }
+            if (request.method === 'DELETE') {
+                const { LogService } = await import('../services/log-service.js');
+                await LogService.clearLogs(env);
+                return createJsonResponse({ success: true });
+            }
+            return createErrorResponse('Method Not Allowed', 405);
+
         case '/settings':
             if (request.method === 'GET') {
                 return await handleSettingsGet(env);
@@ -208,7 +223,7 @@ async function handleExternalFetchRequest(request, env) {
         return createErrorResponse('URL too long (max 2048 characters)', 400);
     }
 
-    console.log(`[External Fetch] Processing URL: ${externalUrl}`);
+    // console.log(`[External Fetch] Processing URL: ${externalUrl}`);
 
     try {
         // 创建带超时的请求
@@ -259,7 +274,7 @@ async function handleExternalFetchRequest(request, env) {
             return createErrorResponse('Response content too large (max 10MB limit)', 413);
         }
 
-        console.log(`[External Fetch] Success: ${content.length} bytes, type: ${contentType}`);
+        // console.log(`[External Fetch] Success: ${content.length} bytes, type: ${contentType}`);
 
         // 返回带有元数据的响应
         return new Response(JSON.stringify({

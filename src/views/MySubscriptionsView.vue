@@ -42,13 +42,23 @@ const handlePreviewProfile = (profileId) => {
 };
 
 const ProfileModal = defineAsyncComponent(() => import('../components/modals/ProfileModal.vue'));
+const LogModal = defineAsyncComponent(() => import('../components/modals/LogModal.vue'));
+
+const showLogModal = ref(false);
+const logProfileName = ref('');
+
+const handleViewLogs = (profileId) => {
+    const profile = profiles.value.find(p => p.id === profileId || p.customId === profileId);
+    if (profile) {
+        logProfileName.value = profile.name;
+        showLogModal.value = true;
+    }
+};
 </script>
 
 <template>
   <div class="max-w-(--breakpoint-xl) mx-auto">
-    <div class="flex justify-between items-center mb-6">
-        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">我的订阅</h1>
-    </div>
+
 
     <ProfilePanel 
       :profiles="profiles"
@@ -64,6 +74,13 @@ const ProfileModal = defineAsyncComponent(() => import('../components/modals/Pro
       @preview="handlePreviewProfile"
       @reorder="handleProfileReorder"
       @change-page="changeProfilesPage"
+      @viewLogs="handleViewLogs"
+    />
+
+    <LogModal
+        :show="showLogModal"
+        @update:show="showLogModal = $event"
+        :filter-profile-name="logProfileName"
     />
 
     <ProfileModal 
