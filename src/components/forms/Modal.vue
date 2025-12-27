@@ -25,6 +25,14 @@ const props = defineProps({
   cancelText: {
     type: String,
     default: '取消'
+  },
+  closeOnClickOutside: { // 控制是否允许点击遮罩层关闭弹窗
+    type: Boolean,
+    default: true
+  },
+  closeOnEscape: { // 控制是否允许按ESC键关闭弹窗
+    type: Boolean,
+    default: true
   }
 });
 
@@ -33,7 +41,7 @@ const emit = defineEmits(['update:show', 'confirm']);
 const confirmInput = ref('');
 
 const handleKeydown = (e) => {
-    if (e.key === 'Escape') {
+    if (e.key === 'Escape' && props.closeOnEscape) {
         emit('update:show', false);
     }
 };
@@ -52,7 +60,7 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown));
     <div
       v-if="show"
       class="fixed inset-0 bg-black/60 backdrop-blur-xs z-99 flex items-center justify-center p-4"
-      @click="emit('update:show', false)"
+      @click="closeOnClickOutside ? emit('update:show', false) : null"
     >
       <Transition name="modal-inner">
         <div
