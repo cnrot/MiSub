@@ -26,6 +26,7 @@ export const DEFAULT_SETTINGS = {
         manualNodePrefix: '手动节点',
         enableNodeEmoji: true
     },
+    enableAccessLog: false,
     nodeTransform: {
         enabled: false,
         rename: {
@@ -63,7 +64,7 @@ export const DEFAULT_SETTINGS = {
     },
     NotifyThresholdDays: 3,
     NotifyThresholdPercent: 90,
-    enableTrafficNode: true,
+    enableTrafficNode: false,
     storageType: 'kv'
 };
 
