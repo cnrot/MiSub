@@ -28,11 +28,11 @@ const props = defineProps({
   },
   closeOnClickOutside: { // 控制是否允许点击遮罩层关闭弹窗
     type: Boolean,
-    default: true
+    default: false
   },
   closeOnEscape: { // 控制是否允许按ESC键关闭弹窗
     type: Boolean,
-    default: true
+    default: false
   }
 });
 
