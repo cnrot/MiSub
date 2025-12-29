@@ -25,14 +25,6 @@ const props = defineProps({
   cancelText: {
     type: String,
     default: '取消'
-  },
-  closeOnClickOutside: { // 控制是否允许点击遮罩层关闭弹窗
-    type: Boolean,
-    default: true
-  },
-  closeOnEscape: { // 控制是否允许按ESC键关闭弹窗
-    type: Boolean,
-    default: true
   }
 });
 
@@ -41,7 +33,7 @@ const emit = defineEmits(['update:show', 'confirm']);
 const confirmInput = ref('');
 
 const handleKeydown = (e) => {
-    if (e.key === 'Escape' && props.closeOnEscape) {
+    if (e.key === 'Escape') {
         emit('update:show', false);
     }
 };
