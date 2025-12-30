@@ -18,6 +18,9 @@ import ProfilePanel from '../../profiles/ProfilePanel.vue';
 import SubscriptionPanel from '../../subscriptions/SubscriptionPanel.vue';
 import ManualNodePanel from '../../nodes/ManualNodePanel.vue';
 import Modal from '../../forms/Modal.vue';
+import SubscriptionEditModal from '../../modals/SubscriptionEditModal.vue';
+import ManualNodeEditModal from '../../modals/ManualNodeEditModal.vue';
+import ManualNodeDedupModal from '../../modals/ManualNodeDedupModal.vue';
 import SkeletonLoader from '../../ui/SkeletonLoader.vue';
 import StatusIndicator from '../../ui/StatusIndicator.vue';
 
@@ -64,7 +67,7 @@ const {
   manualNodes, manualNodesCurrentPage, manualNodesTotalPages, paginatedManualNodes, searchTerm,
   changeManualNodesPage, addNode, updateNode, deleteNode, deleteAllNodes,
   addNodesFromBulk, autoSortNodes, deduplicateNodes,
-  reorderManualNodes, activeColorFilter, setColorFilter, batchUpdateColor, batchDeleteNodes
+  reorderManualNodes, activeColorFilter, setColorFilter, batchUpdateColor, batchDeleteNodes, buildDedupPlan, applyDedupPlan
 } = useManualNodes(markDirty);
 
 const {
@@ -107,6 +110,8 @@ const showSubscriptionImportModal = ref(false);
 const showLogModal = ref(false);
 const showBatchDeleteModal = ref(false);
 const batchDeleteIds = ref([]);
+const showDedupModal = ref(false);
+const dedupPlan = ref(null);
 
 // 节点预览相关状态
 const showNodePreviewModal = ref(false);
@@ -115,6 +120,7 @@ const previewProfileId = ref(null);
 const previewSubscriptionName = ref('');
 const previewSubscriptionUrl = ref('');
 const previewProfileName = ref('');
+
 
 
 // --- 初始化與生命週期 ---
@@ -211,8 +217,13 @@ const handleAutoSortNodes = () => {
 };
 
 const handleDeduplicateNodes = () => {
-    deduplicateNodes();
-    showToast('已完成去重，请手动保存', 'success');
+    const plan = buildDedupPlan();
+    if (!plan || plan.removeCount === 0) {
+        showToast('没有发现重复的节点。', 'info');
+        return;
+    }
+    dedupPlan.value = plan;
+    showDedupModal.value = true;
 };
 
 const handleBatchDeleteRequest = (ids) => {
@@ -471,109 +482,25 @@ const formattedTotalRemainingTraffic = computed(() => formatBytes(totalRemaining
   
   <ProfileModal v-if="showProfileModal" v-model:show="showProfileModal" :profile="editingProfile" :is-new="isNewProfile" :all-subscriptions="subscriptions" :all-manual-nodes="manualNodes" @save="handleSaveProfile" size="2xl" />
   
-  <Modal v-if="editingNode" v-model:show="showNodeModal" @confirm="handleSaveNode" @vue:mounted="console.log('NodeModal Mounted, data:', editingNode)">
-    <template #title><h3 class="text-lg font-bold text-gray-800 dark:text-white">{{ isNewNode ? '新增手动节点' : '编辑手动节点' }}</h3></template>
-    <template #body>
-      <div class="space-y-4">
-        <div><label for="node-name" class="block text-sm font-medium text-gray-700 dark:text-gray-300">节点名称</label><input type="text" id="node-name" v-model="editingNode.name" placeholder="（可选）不填将自动获取" class="mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-xs focus:outline-hidden focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:text-white"></div>
-        
-        <!-- Color Tag Selection -->
-        <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">颜色标签</label>
-            <div class="flex items-center gap-3">
-                <button 
-                    v-for="color in ['red', 'orange', 'green', 'blue']" 
-                    :key="color"
-                    @click="editingNode.colorTag = editingNode.colorTag === color ? null : color"
-                    class="w-8 h-8 rounded-full border-2 transition-all flex items-center justify-center"
-                    :class="[
-                        editingNode.colorTag === color ? 'border-indigo-500 scale-110' : 'border-transparent hover:scale-105',
-                        `bg-${color}-500`
-                    ]"
-                >
-                     <svg v-if="editingNode.colorTag === color" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-white" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>
-                </button>
-                <button 
-                    v-if="editingNode.colorTag"
-                    @click="editingNode.colorTag = null"
-                    class="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 ml-2"
-                >清除</button>
-            </div>
-        </div>
+  <ManualNodeEditModal
+    v-model:show="showNodeModal"
+    :is-new="isNewNode"
+    :editing-node="editingNode"
+    @confirm="handleSaveNode"
+    @input-url="handleNodeUrlInput"
+  />
+  <ManualNodeDedupModal
+    v-model:show="showDedupModal"
+    :plan="dedupPlan"
+    @confirm="applyDedupPlan(dedupPlan); showDedupModal = false; dedupPlan = null"
+  />
 
-        <div><label for="node-url" class="block text-sm font-medium text-gray-700 dark:text-gray-300">节点链接</label><textarea id="node-url" v-model="editingNode.url" @input="handleNodeUrlInput" rows="4" class="mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-xs focus:outline-hidden focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono dark:text-white"></textarea></div>
-      </div>
-    </template>
-  </Modal>
-
-  <Modal v-if="editingSubscription" v-model:show="showSubModal" @confirm="handleSaveSubscription" @vue:mounted="console.log('SubModal Mounted, data:', editingSubscription)">
-    <template #title><h3 class="text-lg font-bold text-gray-800 dark:text-white">{{ isNewSubscription ? '新增订阅' : '编辑订阅' }}</h3></template>
-    <template #body>
-      <div class="space-y-4">
-        <div><label for="sub-edit-name" class="block text-sm font-medium text-gray-700 dark:text-gray-300">订阅名称</label><input type="text" id="sub-edit-name" v-model="editingSubscription.name" placeholder="（可选）不填将自动获取" class="mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-xs focus:outline-hidden focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:text-white"></div>
-        <div><label for="sub-edit-url" class="block text-sm font-medium text-gray-700 dark:text-gray-300">订阅链接</label><input type="text" id="sub-edit-url" v-model="editingSubscription.url" placeholder="https://..." class="mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-xs focus:outline-hidden focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono dark:text-white"></div>
-        <div>
-          <label for="sub-edit-exclude" class="block text-sm font-medium text-gray-700 dark:text-gray-300">包含/排除节点</label>
-          <textarea 
-            id="sub-edit-exclude" 
-            v-model="editingSubscription.exclude"
-            placeholder="[排除模式 (默认)]&#10;proto:vless,trojan&#10;(过期|官网)&#10;---&#10;[包含模式 (只保留匹配项)]&#10;keep:(香港|HK)&#10;keep:proto:ss"
-            rows="5" 
-            class="mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-xs focus:outline-hidden focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono dark:text-white">
-          </textarea>
-          <p class="text-xs text-gray-400 mt-1">每行一条规则。使用 `keep:` 切换为白名单模式。</p>
-        </div>
-        <!-- [新增] User-Agent 设置 -->
-        <div>
-          <label for="sub-edit-ua" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-            自定义 User-Agent
-            <span class="text-xs text-gray-500 ml-2">(可选,留空使用默认)</span>
-          </label>
-          <select 
-            id="sub-edit-ua"
-            v-model="editingSubscription.customUserAgent"
-            class="mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-xs focus:outline-hidden focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:text-white"
-          >
-            <option value="">使用默认 UA</option>
-            <optgroup label="Clash 系列">
-              <option value="clash-verge/v2.4.3">Clash Verge (v2.4.3)</option>
-              <option value="clash.meta">Clash Meta</option>
-              <option value="ClashForAndroid/2.5.12">Clash for Android</option>
-            </optgroup>
-            <optgroup label="V2Ray 系列">
-              <option value="v2rayN/7.23">v2rayN (v7.23)</option>
-              <option value="v2rayNG/1.8.5">v2rayNG (v1.8.5)</option>
-            </optgroup>
-            <optgroup label="其他客户端">
-              <option value="Shadowrocket/1.9.0">Shadowrocket</option>
-              <option value="Surge/5.0.0">Surge</option>
-              <option value="Quantumult%20X/1.4.0">Quantumult X</option>
-            </optgroup>
-            <optgroup label="浏览器">
-              <option value="Mozilla/5.0">Mozilla (通用)</option>
-            </optgroup>
-          </select>
-          <p v-if="editingSubscription.customUserAgent" class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            当前 UA: {{ editingSubscription.customUserAgent }}
-          </p>
-        </div>
-        <!-- [新增] 备注 -->
-        <div>
-          <label for="sub-edit-notes" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-            备注
-            <span class="text-xs text-gray-500 ml-2">(可选,如官网、价格等)</span>
-          </label>
-          <textarea 
-            id="sub-edit-notes" 
-            v-model="editingSubscription.notes"
-            placeholder="例如: 官网: example.com | 价格: ￥20/月 | 到期: 2024-12-31"
-            rows="2" 
-            class="mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-xs focus:outline-hidden focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:text-white"
-          ></textarea>
-        </div>
-      </div>
-    </template>
-  </Modal>
+  <SubscriptionEditModal
+    v-model:show="showSubModal"
+    :is-new="isNewSubscription"
+    :editing-subscription="editingSubscription"
+    @confirm="handleSaveSubscription"
+  />
   
   <SettingsModal 
     v-model:show="uiStore.isSettingsModalVisible" 

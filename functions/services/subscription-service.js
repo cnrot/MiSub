@@ -3,10 +3,9 @@
  * @author MiSub Team
  */
 
-import { NODE_PROTOCOL_REGEX } from '../utils/node-utils.js';
 import { parseNodeList } from '../modules/utils/node-parser.js';
 import { getProcessedUserAgent } from '../utils/format-utils.js';
-import { prependNodeName } from '../utils/node-utils.js';
+import { prependNodeName, removeFlagEmoji } from '../utils/node-utils.js';
 import { applyNodeTransformPipeline } from '../utils/node-transformer.js';
 import { createTimeoutFetch } from '../modules/utils.js';
 
@@ -199,7 +198,8 @@ export async function generateCombinedNodeList(context, config, userAgent, misub
                 // }
                 return '';
             }
-            let text = await response.text();
+            const buffer = await response.arrayBuffer();
+            let text = new TextDecoder('utf-8').decode(buffer);
 
             // if (debug) {
             //     console.log(`[DEBUG] Response for ${sub.url} length: ${text.length}`);
@@ -227,11 +227,20 @@ export async function generateCombinedNodeList(context, config, userAgent, misub
             // 使用统一的 node-parser 解析，确保与预览一致的过滤规则 (UUID校验, Hysteria1过滤, SS加密校验等)
             const parsedObjects = parseNodeList(text);
 
+            let fallbackParsedObjects = parsedObjects;
+            if (parsedObjects.length === 0) {
+                const fallbackText = await decodeBase64Content(encodeArrayBufferToBase64(buffer));
+                const fallbackNodes = parseNodeList(fallbackText);
+                if (fallbackNodes.length > 0) {
+                    fallbackParsedObjects = fallbackNodes;
+                }
+            }
+
             // if (debug) {
             //     console.log(`[DEBUG] Parsed ${parsedObjects.length} valid nodes using node-parser`);
             // }
 
-            let validNodes = parsedObjects.map(node => node.url);
+            let validNodes = fallbackParsedObjects.map(node => node.url);
 
             // if (debug) {
             //     console.log(`[DEBUG] Parsed ${validNodes.length} nodes for ${sub.url}`);
@@ -272,10 +281,14 @@ export async function generateCombinedNodeList(context, config, userAgent, misub
         .map(line => line.trim())
         .filter(Boolean);
 
+    const normalizedLines = shouldAddEmoji
+        ? combinedLines
+        : combinedLines.map(line => removeFlagEmoji(line));
+
     const nodeTransformConfig = profilePrefixSettings?.nodeTransform ?? config.nodeTransform;
     const outputLines = nodeTransformConfig?.enabled
-        ? applyNodeTransformPipeline(combinedLines, { ...nodeTransformConfig, enableEmoji: shouldAddEmoji })
-        : [...new Set(combinedLines)];
+        ? applyNodeTransformPipeline(normalizedLines, { ...nodeTransformConfig, enableEmoji: shouldAddEmoji })
+        : [...new Set(normalizedLines)];
     const uniqueNodesString = outputLines.join('\n');
 
     // 确保最终的字符串在非空时以换行符结束，以兼容 subconverter
@@ -372,13 +385,18 @@ async function decodeBase64Content(text) {
         const cleanedText = text.replace(/\s/g, '');
         const { isValidBase64 } = await import('../utils/format-utils.js');
         if (isValidBase64(cleanedText)) {
-            const binaryString = atob(cleanedText);
+            let normalized = cleanedText.replace(/-/g, '+').replace(/_/g, '/');
+            const padding = normalized.length % 4;
+            if (padding) {
+                normalized += '='.repeat(4 - padding);
+            }
+            const binaryString = atob(normalized);
             const bytes = new Uint8Array(binaryString.length);
             for (let i = 0; i < binaryString.length; i++) { bytes[i] = binaryString.charCodeAt(i); }
             return new TextDecoder('utf-8').decode(bytes);
         }
     } catch (e) {
-        // Base64解码失败，使用原始内容
+        // Base64?????????????????????????????????
     }
     return text;
 }
@@ -521,107 +539,161 @@ function fixNodeUrlEncoding(nodeUrl) {
  * @returns {Array} - 过滤后的节点列表
  */
 function applyFilterRules(validNodes, sub) {
-    if (sub.exclude && sub.exclude.trim() !== '') {
-        const rules = sub.exclude.trim().split('\n').map(r => r.trim()).filter(Boolean);
+    const ruleText = sub.exclude;
+    if (!ruleText || ruleText.trim() === '') return validNodes;
 
-        const keepRules = rules.filter(r => r.toLowerCase().startsWith('keep:'));
+    const lines = ruleText
+        .split('\n')
+        .map(r => r.trim())
+        .filter(Boolean);
 
-        if (keepRules.length > 0) {
-            // --- 白名单模式 (Inclusion Mode) ---
-            const nameRegexParts = [];
-            const protocolsToKeep = new Set();
+    if (lines.length === 0) return validNodes;
 
-            keepRules.forEach(rule => {
-                const content = rule.substring('keep:'.length).trim();
-                if (content.toLowerCase().startsWith('proto:')) {
-                    const protocols = content.substring('proto:'.length).split(',').map(p => p.trim().toLowerCase());
-                    protocols.forEach(p => protocolsToKeep.add(p));
-                } else {
-                    nameRegexParts.push(content);
-                }
-            });
+    // ???????--- ??????--- ????????? keep: ?????
+    const dividerIndex = lines.findIndex(line => line === '---');
+    const hasDivider = dividerIndex !== -1;
 
-            const nameRegex = nameRegexParts.length > 0 ? new RegExp(nameRegexParts.join('|'), 'i') : null;
+    const excludeLines = hasDivider
+        ? lines.slice(0, dividerIndex)
+        : lines.filter(line => !line.toLowerCase().startsWith('keep:'));
 
-            validNodes = validNodes.filter(nodeLink => {
-                // 检查协议是否匹配
-                const protocolMatch = nodeLink.match(/^(.*?):\/\//);
-                const protocol = protocolMatch ? protocolMatch[1].toLowerCase() : '';
-                if (protocolsToKeep.has(protocol)) {
-                    return true;
-                }
+    const keepLines = hasDivider
+        ? lines.slice(dividerIndex + 1)
+        : lines.filter(line => line.toLowerCase().startsWith('keep:'));
 
-                // 检查名称是否匹配
-                if (nameRegex) {
-                    const hashIndex = nodeLink.lastIndexOf('#');
-                    if (hashIndex !== -1) {
-                        try {
-                            const nodeName = decodeURIComponent(nodeLink.substring(hashIndex + 1));
-                            if (nameRegex.test(nodeName)) {
-                                return true;
-                            }
-                        } catch (e) { /* 忽略解码错误 */ }
-                    }
-                }
-                return false; // 白名单模式下，不匹配任何规则则排除
-            });
+    const excludeRules = buildRuleSet(excludeLines, false);
+    const keepRules = buildRuleSet(keepLines, true);
 
-        } else {
-            // --- 黑名单模式 (Exclusion Mode) ---
-            const protocolsToExclude = new Set();
-            const nameRegexParts = [];
+    const whitelistOnly = !hasDivider && keepRules.hasRules;
+    const shouldApplyWhitelist = (hasDivider && keepRules.hasRules) || whitelistOnly;
 
-            rules.forEach(rule => {
-                if (rule.toLowerCase().startsWith('proto:')) {
-                    const protocols = rule.substring('proto:'.length).split(',').map(p => p.trim().toLowerCase());
-                    protocols.forEach(p => protocolsToExclude.add(p));
-                } else {
-                    nameRegexParts.push(rule);
-                }
-            });
+    const afterExclude = whitelistOnly
+        ? [...validNodes]
+        : filterNodes(validNodes, excludeRules, 'exclude');
 
-            const nameRegex = nameRegexParts.length > 0 ? new RegExp(nameRegexParts.join('|'), 'i') : null;
+    return shouldApplyWhitelist
+        ? filterNodes(afterExclude, keepRules, 'include')
+        : afterExclude;
+}
 
-            validNodes = validNodes.filter(nodeLink => {
-                const protocolMatch = nodeLink.match(/^(.*?):\/\//);
-                const protocol = protocolMatch ? protocolMatch[1].toLowerCase() : '';
-                if (protocolsToExclude.has(protocol)) {
-                    return false;
-                }
+function buildRuleSet(lines, stripKeepPrefix = false) {
+    const protocols = new Set();
+    const patterns = [];
 
-                if (nameRegex) {
-                    const hashIndex = nodeLink.lastIndexOf('#');
-                    if (hashIndex !== -1) {
-                        try {
-                            const nodeName = decodeURIComponent(nodeLink.substring(hashIndex + 1));
-                            if (nameRegex.test(nodeName)) {
-                                return false;
-                            }
-                        } catch (e) { /* 忽略解码错误 */ }
-                    }
-                    // 对于vmess协议，需要特殊处理节点名称
-                    else if (protocol === 'vmess') {
-                        try {
-                            // 提取vmess链接中的Base64部分
-                            const base64Part = nodeLink.substring('vmess://'.length);
-                            // 解码Base64
-                            const binaryString = atob(base64Part);
-                            const bytes = new Uint8Array(binaryString.length);
-                            for (let i = 0; i < binaryString.length; i++) {
-                                bytes[i] = binaryString.charCodeAt(i);
-                            }
-                            const jsonString = new TextDecoder('utf-8').decode(bytes);
-                            const nodeConfig = JSON.parse(jsonString);
-                            const nodeName = nodeConfig.ps || '';
-                            if (nameRegex.test(nodeName)) {
-                                return false;
-                            }
-                        } catch (e) { /* 忽略解码错误 */ }
-                    }
-                }
-                return true;
-            });
+    for (const rawLine of lines) {
+        let line = rawLine.trim();
+        if (!line || line === '---') continue;
+
+        if (stripKeepPrefix && line.toLowerCase().startsWith('keep:')) {
+            line = line.substring('keep:'.length).trim();
+        }
+        if (!line) continue;
+
+        if (line.toLowerCase().startsWith('proto:')) {
+            const parts = line.substring('proto:'.length)
+                .split(',')
+                .map(p => p.trim().toLowerCase())
+                .filter(Boolean);
+            parts.forEach(p => protocols.add(p));
+            continue;
+        }
+
+        patterns.push(line);
+    }
+
+    const nameRegex = buildSafeRegex(patterns);
+    return {
+        protocols,
+        nameRegex,
+        hasRules: protocols.size > 0 || Boolean(nameRegex)
+    };
+}
+
+function buildSafeRegex(patterns) {
+    if (!patterns.length) return null;
+    try {
+        return new RegExp(patterns.join('|'), 'i');
+    } catch (e) {
+        console.warn('Invalid include/exclude regex, skipped:', e.message);
+        return null;
+    }
+}
+
+function filterNodes(nodes, rules, mode = 'exclude') {
+    if (!rules || !rules.hasRules) return nodes;
+    const isInclude = mode === 'include';
+
+    return nodes.filter(nodeLink => {
+        const protocol = extractProtocol(nodeLink);
+        const nodeName = extractNodeName(nodeLink, protocol);
+
+        const protocolHit = protocol && rules.protocols.has(protocol);
+        const nameHit = rules.nameRegex ? rules.nameRegex.test(nodeName) : false;
+
+        if (isInclude) {
+            return protocolHit || nameHit;
+        }
+        return !(protocolHit || nameHit);
+    });
+}
+
+function extractProtocol(nodeLink) {
+    const match = nodeLink.match(/^([a-z0-9.+-]+):\/\//i);
+    return match ? match[1].toLowerCase() : '';
+}
+
+function extractNodeName(nodeLink, protocol) {
+    const hashIndex = nodeLink.lastIndexOf('#');
+    if (hashIndex !== -1) {
+        try {
+            return decodeURIComponent(nodeLink.substring(hashIndex + 1));
+        } catch (e) {
+            return nodeLink.substring(hashIndex + 1);
         }
     }
-    return validNodes;
+
+    if (protocol === 'vmess') {
+        return decodeVmessName(nodeLink);
+    }
+    return '';
+}
+
+function decodeVmessName(nodeLink) {
+    try {
+        let base64Part = nodeLink.substring('vmess://'.length);
+        if (base64Part.includes('%')) {
+            base64Part = decodeURIComponent(base64Part);
+        }
+        base64Part = base64Part.replace(/-/g, '+').replace(/_/g, '/');
+        while (base64Part.length % 4 !== 0) {
+            base64Part += '=';
+        }
+        const binaryString = atob(base64Part);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+        }
+        const jsonString = new TextDecoder('utf-8').decode(bytes);
+        const nodeConfig = JSON.parse(jsonString);
+        return typeof nodeConfig.ps === 'string' ? nodeConfig.ps : '';
+    } catch (e) {
+        return '';
+    }
+}
+
+
+/**
+ * ArrayBuffer -> Base64????????????
+ */
+function encodeArrayBufferToBase64(buffer) {
+    const bytes = new Uint8Array(buffer);
+    const chunkSize = 0x8000;
+    let binary = '';
+
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+        const chunk = bytes.subarray(i, i + chunkSize);
+        binary += String.fromCharCode(...chunk);
+    }
+
+    return btoa(binary);
 }
