@@ -1,6 +1,6 @@
 export const countryCodeMap = {
   'hk': ['🇭🇰', '香港', 'HK'],
-  'tw': ['🇹🇼', '台湾', '臺灣'],
+  'tw': ['🇨🇳', '台湾', '臺灣'],
   'sg': ['🇸🇬', '新加坡', '狮城'],
   'jp': ['🇯🇵', '日本'],
   'us': ['🇺🇸', '美国', '美國'],
@@ -64,7 +64,7 @@ export function isManualNodeEntry(item) {
 
   if (/^https?:\/\//i.test(trimmedUrl)) return false;
 
-  const validProtocols = /^(ss|ssr|vmess|vless|trojan|hysteria2?|hy2|tuic|snell|naive|socks5|socks|http):\/\//i;
+  const validProtocols = /^(ss|ssr|vmess|vless|trojan|hysteria2?|hy2|tuic|snell|naive|socks5|socks|http|anytls):\/\//i;
   return validProtocols.test(trimmedUrl);
 }
 
