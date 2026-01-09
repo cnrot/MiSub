@@ -1,11 +1,29 @@
 <script setup>
 import { useThemeStore } from '../../stores/theme.js';
 import { useUIStore } from '../../stores/ui.js';
+import { useSessionStore } from '../../stores/session.js';
+import { computed } from 'vue';
+import { useRoute } from 'vue-router';
 import ThemeToggle from '../features/ThemeToggle.vue';
 import PWAInstallPrompt from '../features/PWAInstallPrompt.vue';
 
 const { theme, toggleTheme } = useThemeStore();
 const uiStore = useUIStore();
+const sessionStore = useSessionStore();
+const route = useRoute();
+
+const shouldHideLoginButton = computed(() => {
+    // If a custom login path is set, HIDE the button unless we are ON that path.
+    // The path matching logic in Entrance.vue handles the view, but this handles the nav button.
+    const customPath = sessionStore.publicConfig?.customLoginPath;
+    if (customPath) {
+        // If we have a custom path, simple logic: hide the button.
+        // Users on the custom path will see the LOGIN FORM, not this button.
+        // Users NOT on the custom path (e.g. Home) should NOT see a way to login easily.
+        return true; 
+    }
+    return false;
+});
 
 // 【核心修正】接收一个 isLoggedIn 属性
 const props = defineProps({

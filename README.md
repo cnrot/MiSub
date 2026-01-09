@@ -206,14 +206,107 @@ wrangler d1 execute misub --file=schema.sql --remote
 
 ---
 
+## 🐳 VPS / Docker 部署
+
+适用于自建服务器部署（与 Cloudflare Pages 保持功能兼容）。
+
+### 1. 构建并启动
+
+```bash
+docker compose up -d --build
+```
+
+默认端口为 `8787`，访问 `http://<vps-ip>:8787`。
+
+### 2. 环境变量
+
+在 `docker-compose.yml` 中配置：
+
+- `ADMIN_PASSWORD` 管理员密码（必填）
+- `COOKIE_SECRET` Cookie 加密密钥（必填）
+- `CORS_ORIGINS` 允许跨域访问的来源（可选）
+- `PORT` 服务端口（默认 8787）
+- `MISUB_DB_PATH` SQLite 数据库路径（默认 `/app/data/misub.db`）
+
+### 3. 数据持久化
+
+默认通过 `./data` 目录持久化数据库文件。
+
+---
+
+## 📦 GHCR 镜像部署（免源码）
+
+最小化 VPS 部署步骤：
+
+1. 新建目录并进入：
+```bash
+mkdir -p /opt/misub && cd /opt/misub
+```
+
+2. 创建 `docker-compose.yml`（使用 GHCR 镜像）：
+```yaml
+services:
+  misub:
+    image: ghcr.io/imzyb/misub:latest
+    ports:
+      - "8790:8787"
+    environment:
+      PORT: 8787
+      MISUB_DB_PATH: /app/data/misub.db
+      ADMIN_PASSWORD: "change_me"
+      COOKIE_SECRET: "change_me_too"
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+```
+
+3. 启动并拉取镜像：
+```bash
+docker compose pull
+docker compose up -d
+```
+
+4. 访问：
+```
+http://<vps-ip>:8790
+```
+
+---
+
+## ☁️ Zeabur 一键部署
+
+支持通过 [Zeabur](https://zeabur.com) 平台一键部署：
+
+[![Deploy on Zeabur](https://zeabur.com/button.svg)](https://zeabur.com/templates/MISUB)
+
+### 手动部署步骤
+
+1. 在 Zeabur 创建新项目，选择 **从 Git 部署**
+2. 连接 GitHub 并选择你 Fork 的 MiSub 仓库
+3. 等待构建完成（使用 Docker 方式构建）
+4. 在服务设置中添加环境变量：
+
+| 变量名 | 说明 | 必填 |
+|--------|------|------|
+| `ADMIN_PASSWORD` | 管理员密码 | ✅ |
+| `COOKIE_SECRET` | Cookie 加密密钥 | ✅ |
+| `MISUB_DB_PATH` | 数据库路径（建议 `/app/data/misub.db`） | ✅ |
+
+5. 绑定域名或使用 Zeabur 提供的 `.zeabur.app` 域名
+
+> ⚠️ **注意**: Zeabur 部署默认使用端口 8080，已在 `zeabur.json` 中配置。
+
+
 ## 💡 使用说明
 
 ### 登录管理界面
 
+
+
 ### 登录管理界面
 
-1. 访问您的 Cloudflare Pages 域名（进入公开主页）。
-2. 点击右上角的 **"登录"** 按钮。
+1. 部署完成后，公开页面默认 **不开启**（访问域名会显示伪装页）。
+2. 请直接访问 `您的域名/login` 进入登录页面。
 3. 输入设置的 `ADMIN_PASSWORD` 即可进入管理后台。
 
 ### 添加订阅

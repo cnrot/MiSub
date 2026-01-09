@@ -3,13 +3,13 @@ import { migrateConfigSettings, formatBytes, getCallbackToken } from '../utils.j
 import { generateCombinedNodeList } from '../../services/subscription-service.js';
 import { sendEnhancedTgNotification } from '../notifications.js';
 import { KV_KEY_SUBS, KV_KEY_PROFILES, KV_KEY_SETTINGS, DEFAULT_SETTINGS as defaultSettings } from '../config.js';
-import { renderDisguisePage, createDisguiseResponse } from '../disguise-page.js';
+import { createDisguiseResponse } from '../disguise-page.js';
 import { generateCacheKey, setCache } from '../../services/node-cache-service.js';
 import { resolveRequestContext } from './request-context.js';
-import { buildSubconverterUrlVariants, getSubconverterCandidates, fetchFromSubconverter } from './subconverter-client.js';
+import { buildSubconverterUrlVariants, getSubconverterCandidates } from './subconverter-client.js';
 import { resolveNodeListWithCache } from './cache-manager.js';
 import { logAccessError, logAccessSuccess, shouldSkipLogging as shouldSkipAccessLog } from './access-logger.js';
-import { isBrowserAgent, determineTargetFormat } from './user-agent-utils.js';
+import { isBrowserAgent } from './user-agent-utils.js'; // [Added] Import centralized util
 
 /**
  * 处理MiSub订阅请求
@@ -33,16 +33,18 @@ export async function handleMisubRequest(context) {
     // 关键：我们在这里定义了 `config`，后续都应该使用它
     const config = migrateConfigSettings({ ...defaultSettings, ...settings });
 
+
+
     const isBrowser = isBrowserAgent(userAgentHeader);
 
     if (config.disguise?.enabled && isBrowser && !url.searchParams.has('callback_token')) {
-        // [Smart Camouflage]
+        // [Smart Camouflage] Allow Admin Access
         // Check if the user has a valid admin session cookie
         const { authMiddleware } = await import('../auth-middleware.js');
         const isAuthenticated = await authMiddleware(request, env); // Returns boolean
 
         if (!isAuthenticated) {
-            return createDisguiseResponse(config.disguise);
+            return createDisguiseResponse(config.disguise, request.url);
         }
     }
 
@@ -54,6 +56,7 @@ export async function handleMisubRequest(context) {
     let effectiveSubConverter;
     let effectiveSubConfig;
     let isProfileExpired = false; // Moved declaration here
+    let shouldUseEmoji = false;   // 是否在 subconverter 请求中启用 emoji
 
     const DEFAULT_EXPIRED_NODE = `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('您的订阅已失效')}`;
 
@@ -94,6 +97,20 @@ export async function handleMisubRequest(context) {
             }
             effectiveSubConverter = profile.subConverter && profile.subConverter.trim() !== '' ? profile.subConverter : config.subConverter;
             effectiveSubConfig = profile.subConfig && profile.subConfig.trim() !== '' ? profile.subConfig : config.subConfig;
+
+            // 判断是否需要在 subconverter 中启用 emoji：使用回退逻辑（订阅组 > 全局 > 默认）
+            const defaultTemplate = '{emoji}{region}-{protocol}-{index}';
+            const globalNodeTransform = config.defaultNodeTransform || {};
+            const profileNodeTransform = profile.nodeTransform || {};
+
+            // 确定有效的 nodeTransform 配置
+            const effectiveTransform = profileNodeTransform.enabled !== undefined
+                ? profileNodeTransform
+                : (globalNodeTransform.enabled ? globalNodeTransform : profileNodeTransform);
+
+            const userTemplate = effectiveTransform?.rename?.template?.template || defaultTemplate;
+            const templateEnabled = effectiveTransform?.enabled && effectiveTransform?.rename?.template?.enabled;
+            shouldUseEmoji = templateEnabled && userTemplate.includes('{emoji}');
 
             // [新增] 增加订阅组下载计数
             // 仅在非回调请求时及非内部请求时增加计数(避免重复计数)
@@ -143,28 +160,51 @@ export async function handleMisubRequest(context) {
         return new Response('Subconverter backend is not configured.', { status: 500 });
     }
 
-    let targetFormat = determineTargetFormat(userAgentHeader, url.searchParams);
-
-    // [Telegram Notification] Send notification if Bot credentials are configured (independent of access log setting)
-    if (!url.searchParams.has('callback_token') && !shouldSkipLogging) {
-        const clientIp = request.headers.get('CF-Connecting-IP') || 'N/A';
-        const country = request.headers.get('CF-IPCountry') || 'N/A';
-        const domain = url.hostname;
-
-        let additionalData = `*域名:* \`${domain}\`\n*客户端:* \`${userAgentHeader}\`\n*请求格式:* \`${targetFormat}\``;
-
-        if (profileIdentifier) {
-            additionalData += `\n*订阅组:* \`${subName}\``;
-            const profile = allProfiles.find(p => (p.customId && p.customId === profileIdentifier) || p.id === profileIdentifier);
-            if (profile && profile.expiresAt) {
-                const expiryDateStr = new Date(profile.expiresAt).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
-                additionalData += `\n*到期时间:* \`${expiryDateStr}\``;
+    let targetFormat = url.searchParams.get('target');
+    if (!targetFormat) {
+        const supportedFormats = ['clash', 'singbox', 'surge', 'loon', 'base64', 'v2ray', 'trojan'];
+        for (const format of supportedFormats) {
+            if (url.searchParams.has(format)) {
+                if (format === 'v2ray' || format === 'trojan') { targetFormat = 'base64'; } else { targetFormat = format; }
+                break;
             }
         }
-
-        // 使用增强版TG通知,包含IP地理位置信息
-        context.waitUntil(sendEnhancedTgNotification(config, '🛰️ *订阅被访问*', clientIp, additionalData));
     }
+    if (!targetFormat) {
+        const ua = userAgentHeader.toLowerCase();
+        // 使用陣列來保證比對的優先順序
+        const uaMapping = [
+            // Mihomo/Meta 核心的客戶端 - 需要clash格式
+            ['flyclash', 'clash'],
+            ['mihomo', 'clash'],
+            ['clash.meta', 'clash'],
+            ['clash-verge', 'clash'],
+            ['meta', 'clash'],
+
+            // 其他客戶端
+            ['stash', 'clash'],
+            ['nekoray', 'clash'],
+            ['sing-box', 'singbox'],
+            ['shadowrocket', 'base64'],
+            ['v2rayn', 'base64'],
+            ['v2rayng', 'base64'],
+            ['surge', 'surge'],
+            ['loon', 'loon'],
+            ['quantumult%20x', 'quanx'],
+            ['quantumult', 'quanx'],
+
+            // 最後才匹配通用的 clash，作為向下相容
+            ['clash', 'clash']
+        ];
+
+        for (const [keyword, format] of uaMapping) {
+            if (ua.includes(keyword)) {
+                targetFormat = format;
+                break; // 找到第一個符合的就停止
+            }
+        }
+    }
+    if (!targetFormat) { targetFormat = 'base64'; }
 
     // [Access Log] Record access log and stats if enabled
     if (!url.searchParams.has('callback_token') && !shouldSkipLogging && config.enableAccessLog) {
@@ -226,29 +266,28 @@ export async function handleMisubRequest(context) {
         };
 
         const currentProfile = profileIdentifier ? allProfiles.find(p => (p.customId && p.customId === profileIdentifier) || p.id === profileIdentifier) : null;
-        const defaultPrefixSettings = config.defaultPrefixSettings || {
-            enableManualNodes: true,
-            enableSubscriptions: true,
-            manualNodePrefix: '手动节点'
-        };
-        const generationSettings = currentProfile
-            ? {
-                ...(currentProfile?.prefixSettings || {}),
-                nodeTransform: currentProfile?.nodeTransform,
-                name: subName
-            }
-            : {
-                ...defaultPrefixSettings,
-                nodeTransform: config.defaultNodeTransform,
-                name: subName
-            };
 
-        // 拉取策略：
-        // - 同步拉取（客户端等待）：较短超时，尽量在 15s 内完成
-        // - 后台刷新：更长超时，确保完整拉取所有订阅源
-        const fetchPolicy = isBackground
-            ? { timeoutMs: 30000, maxRetries: 2, concurrency: 4, overallTimeoutMs: null }  // 后台：30s 超时，确保完整
-            : { timeoutMs: 10000, maxRetries: 1, concurrency: 8, overallTimeoutMs: null }; // 同步：10s 超时，快速响应
+        // 设置优先级：订阅组设置 > 全局设置 > 内置默认值
+        // prefixSettings 回退逻辑
+        const effectivePrefixSettings = {
+            ...(config.defaultPrefixSettings || {}),    // 全局设置（已包含内置默认值）
+            ...(currentProfile?.prefixSettings || {})   // 订阅组设置覆盖
+        };
+
+        // nodeTransform 回退逻辑
+        const globalNodeTransform = config.defaultNodeTransform || {};
+        const profileNodeTransform = currentProfile?.nodeTransform || {};
+
+        // 深度合并 nodeTransform（订阅组优先）
+        const effectiveNodeTransform = profileNodeTransform.enabled !== undefined
+            ? profileNodeTransform  // 如果订阅组明确启用/禁用了转换，使用订阅组设置
+            : (globalNodeTransform.enabled ? globalNodeTransform : profileNodeTransform);  // 否则尝试全局设置
+
+        const generationSettings = {
+            ...effectivePrefixSettings,
+            nodeTransform: effectiveNodeTransform,
+            name: subName
+        };
 
         const freshNodes = await generateCombinedNodeList(
             context, // 传入完整 context
@@ -257,21 +296,14 @@ export async function handleMisubRequest(context) {
             targetMisubs,
             prependedContentForSubconverter,
             generationSettings,
-            isDebugToken,
-            fetchPolicy
+            isDebugToken
         );
-
-        // 写入缓存（无论是同步还是后台刷新都写入）
         const sourceNames = targetMisubs
             .filter(s => s.url.startsWith('http'))
             .map(s => s.name || s.url);
         await setCache(storageAdapter, cacheKey, freshNodes, sourceNames);
-
         return freshNodes;
     };
-
-    // 缓存 miss 时不使用占位节点，而是返回提示信息
-    const missFallbackNodeList = '';
 
     const { combinedNodeList, cacheHeaders } = await resolveNodeListWithCache({
         storageAdapter,
@@ -279,73 +311,10 @@ export async function handleMisubRequest(context) {
         forceRefresh,
         refreshNodes,
         context,
-        targetMisubsCount: targetMisubs.length,
-        // 同步刷新超时：12s，确保在客户端 15s 超时前返回
-        // 如果超时，后台会继续完成完整拉取
-        syncRefreshTimeoutMs: 12000,
-        missFallbackNodeList
+        targetMisubsCount: targetMisubs.length
     });
 
-    // 如果缓存 miss 且超时（没有拉取到节点），返回友好提示
-    if (cacheHeaders['X-Cache-Status'] === 'MISS_TIMEOUT' || (!combinedNodeList && !forceRefresh)) {
-        const retryMessage = '订阅正在后台生成中，请等待 5-10 秒后重试。';
-        const retryMessageEn = 'Subscription is being generated in background, please retry in 5-10 seconds.';
-        let responseBody = `${retryMessage}\n${retryMessageEn}`;
-        let contentType = 'text/plain; charset=utf-8';
-
-        if (targetFormat === 'clash') {
-            responseBody = [
-                `# ${retryMessage}`,
-                `# ${retryMessageEn}`,
-                'proxies: []',
-                'proxy-groups: []',
-                'rules: []',
-                ''
-            ].join('\n');
-            contentType = 'text/yaml; charset=utf-8';
-        }
-
-        const retryHeaders = new Headers({
-            'Content-Type': contentType,
-            'Cache-Control': 'no-store, no-cache',
-            'Retry-After': '5'
-        });
-        Object.entries(cacheHeaders).forEach(([key, value]) => {
-            retryHeaders.set(key, value);
-        });
-        return new Response(responseBody, { status: 202, headers: retryHeaders });
-    }
-
     const domain = url.hostname;
-    const isNekoBoxClient = /nekobox/i.test(userAgentHeader);
-    const hasRealityNode = /security=reality/i.test(combinedNodeList || '');
-
-    if (isNekoBoxClient && hasRealityNode && targetFormat !== 'base64') {
-        const fallbackHeaders = { "Content-Type": "text/plain; charset=utf-8", 'Cache-Control': 'no-store, no-cache' };
-        Object.entries(cacheHeaders).forEach(([key, value]) => {
-            fallbackHeaders[key] = value;
-        });
-        fallbackHeaders['X-MiSub-Fallback'] = 'base64';
-        fallbackHeaders['X-MiSub-Reason'] = 'nekobox-reality';
-
-        // [Deferred Logging] Log Success for Base64 fallback
-        if (!url.searchParams.has('callback_token') && !shouldSkipLogging && config.enableAccessLog) {
-            logAccessSuccess({
-                context,
-                env,
-                request,
-                userAgentHeader,
-                targetFormat: 'base64',
-                token,
-                profileIdentifier,
-                subName,
-                domain
-            });
-        }
-
-        const fallbackContent = btoa(unescape(encodeURIComponent(combinedNodeList)));
-        return new Response(fallbackContent, { headers: fallbackHeaders });
-    }
 
     if (targetFormat === 'base64') {
         let contentToEncode;
@@ -360,18 +329,32 @@ export async function handleMisubRequest(context) {
         });
 
         // [Deferred Logging] Log Success for Base64 (Direct Return)
-        if (!url.searchParams.has('callback_token') && !shouldSkipLogging && config.enableAccessLog) {
-            logAccessSuccess({
-                context,
-                env,
-                request,
-                userAgentHeader,
-                targetFormat,
-                token,
-                profileIdentifier,
-                subName,
-                domain
-            });
+        if (!url.searchParams.has('callback_token') && !shouldSkipLogging) {
+            // 发送 Telegram 通知（独立于访问日志开关，只需配置 BotToken 和 ChatID）
+            const clientIp = request.headers.get('CF-Connecting-IP') || 'N/A';
+            context.waitUntil(
+                sendEnhancedTgNotification(
+                    config,
+                    '🛰️ *订阅被访问*',
+                    clientIp,
+                    `*域名:* \`${domain}\`\n*客户端:* \`${userAgentHeader}\`\n*请求格式:* \`${targetFormat}\`\n*订阅组:* \`${subName}\``
+                )
+            );
+
+            // 访问日志（需要 enableAccessLog 开关）
+            if (config.enableAccessLog) {
+                logAccessSuccess({
+                    context,
+                    env,
+                    request,
+                    userAgentHeader,
+                    targetFormat,
+                    token,
+                    profileIdentifier,
+                    subName,
+                    domain
+                });
+            }
         }
 
         return new Response(btoa(unescape(encodeURIComponent(contentToEncode))), { headers });
@@ -388,42 +371,81 @@ export async function handleMisubRequest(context) {
     }
 
     const candidates = getSubconverterCandidates(effectiveSubConverter);
-    const triedEndpoints = [];
     let lastError = null;
-    let finalResponse = null;
+    const triedEndpoints = [];
 
-    try {
-        const { response, usedEndpoint } = await fetchFromSubconverter(candidates, {
-            targetFormat,
-            callbackUrl,
-            subConfig: effectiveSubConfig,
-            subName,
-            cacheHeaders,
-            timeout: 15000 // 15s timeout
-        });
+    for (const backend of candidates) {
+        const variants = buildSubconverterUrlVariants(backend);
+        for (const subconverterUrl of variants) {
+            triedEndpoints.push(subconverterUrl.origin + subconverterUrl.pathname);
+            try {
+                subconverterUrl.searchParams.set('target', targetFormat);
+                subconverterUrl.searchParams.set('url', callbackUrl);
+                subconverterUrl.searchParams.set('scv', 'true');
+                subconverterUrl.searchParams.set('udp', 'true');
+                subconverterUrl.searchParams.set('emoji', shouldUseEmoji ? 'true' : 'false');  // 根据模板动态设置 emoji 参数
+                if ((targetFormat === 'clash' || targetFormat === 'loon' || targetFormat === 'surge') && effectiveSubConfig && effectiveSubConfig.trim() !== '') {
+                    subconverterUrl.searchParams.set('config', effectiveSubConfig);
+                }
+                subconverterUrl.searchParams.set('new_name', 'true');
 
-        // [Deferred Logging] Log Success for Subconverter
-        if (!url.searchParams.has('callback_token') && !shouldSkipLogging && config.enableAccessLog) {
-            logAccessSuccess({
-                context,
-                env,
-                request,
-                userAgentHeader,
-                targetFormat,
-                token,
-                profileIdentifier,
-                subName,
-                domain
-            });
+                const subconverterResponse = await fetch(subconverterUrl.toString(), {
+                    method: 'GET',
+                    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; MiSub-Backend)' },
+                });
+                if (!subconverterResponse.ok) {
+                    const errorBody = await subconverterResponse.text();
+                    lastError = new Error(`Subconverter(${subconverterUrl.origin}) returned status ${subconverterResponse.status}. Body: ${errorBody}`);
+                    console.warn('[SubConverter] Non-OK response, trying next backend if available:', lastError.message);
+                    continue;
+                }
+                const responseText = await subconverterResponse.text();
+
+                const responseHeaders = new Headers(subconverterResponse.headers);
+                responseHeaders.set("Content-Disposition", `attachment; filename*=utf-8''${encodeURIComponent(subName)}`);
+                responseHeaders.set('Content-Type', 'text/plain; charset=utf-8');
+                responseHeaders.set('Cache-Control', 'no-store, no-cache');
+
+                // 添加缓存状态头
+                Object.entries(cacheHeaders).forEach(([key, value]) => {
+                    responseHeaders.set(key, value);
+                });
+
+                // [Deferred Logging] Log Success for Subconverter
+                if (!url.searchParams.has('callback_token') && !shouldSkipLogging) {
+                    // 发送 Telegram 通知（独立于访问日志开关）
+                    const clientIp = request.headers.get('CF-Connecting-IP') || 'N/A';
+                    context.waitUntil(
+                        sendEnhancedTgNotification(
+                            config,
+                            '🛰️ *订阅被访问*',
+                            clientIp,
+                            `*域名:* \`${domain}\`\n*客户端:* \`${userAgentHeader}\`\n*请求格式:* \`${targetFormat}\`\n*订阅组:* \`${subName}\``
+                        )
+                    );
+
+                    // 访问日志（需要 enableAccessLog 开关）
+                    if (config.enableAccessLog) {
+                        logAccessSuccess({
+                            context,
+                            env,
+                            request,
+                            userAgentHeader,
+                            targetFormat,
+                            token,
+                            profileIdentifier,
+                            subName,
+                            domain
+                        });
+                    }
+                }
+
+                return new Response(responseText, { status: subconverterResponse.status, statusText: subconverterResponse.statusText, headers: responseHeaders });
+            } catch (error) {
+                lastError = error;
+                console.warn(`[SubConverter] Error with backend ${subconverterUrl.origin}: ${error.message}. Trying next fallback if available.`);
+            }
         }
-
-        return response;
-
-    } catch (err) {
-        lastError = err;
-        // Collect tried endpoints from error message if possible or just use candidates
-        // For simplicity here, we assume user knows based on candidates. 
-        // Or we could have fetchFromSubconverter return more info on error.
     }
 
     const errorMessage = lastError ? `${lastError.message}. Tried: ${triedEndpoints.join(', ')}` : 'Unknown subconverter error';
@@ -460,6 +482,19 @@ export async function handleMisubRequest(context) {
 
         // 附带简短错误信息，防止 header 过长
         fallbackHeaders.set('X-MiSub-Error', errorMessage.slice(0, 200));
+
+        // [Fallback Success] 也发送 Telegram 通知，因为用户仍获取了订阅内容
+        if (!url.searchParams.has('callback_token') && !shouldSkipLogging) {
+            const clientIp = request.headers.get('CF-Connecting-IP') || 'N/A';
+            context.waitUntil(
+                sendEnhancedTgNotification(
+                    config,
+                    '🛰️ *订阅被访问* (Fallback)',
+                    clientIp,
+                    `*域名:* \`${domain}\`\n*客户端:* \`${userAgentHeader}\`\n*请求格式:* \`base64\`\n*订阅组:* \`${subName}\``
+                )
+            );
+        }
 
         const fallbackContent = btoa(unescape(encodeURIComponent(combinedNodeList)));
         return new Response(fallbackContent, { headers: fallbackHeaders, status: 200 });

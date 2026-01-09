@@ -2,7 +2,7 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { VitePWA } from 'vite-plugin-pwa'
 import tailwindcss from '@tailwindcss/vite'
-import manifest from './public/manifest.json' assert { type: 'json' }
+import manifest from './public/manifest.json' with { type: 'json' }
 
 export default defineConfig({
   plugins: [
@@ -13,12 +13,17 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         // 使用离线回退页面，并显式忽略订阅路径
-        navigateFallback: '/offline.html',
+        navigateFallback: '/index.html',
         navigateFallbackDenylist: [
           /^\/sub\/.*/,      // /sub/...
+          /^\/cdn-cgi\/.*/,  // Cloudflare Web Analytics
           /^\/[^/]+\/[^/]+(\?.*)?$/ // Two-segment paths like /test1/work, optionally with query params
         ],
         runtimeCaching: [
+          {
+            urlPattern: /^\/cdn-cgi\/.*/,
+            handler: 'NetworkOnly',
+          },
           {
             urlPattern: /^https:\/\/api\..*/i,
             handler: 'NetworkFirst',
@@ -49,21 +54,7 @@ export default defineConfig({
               }
             }
           },
-          {
-            urlPattern: ({ request }) => request.destination === 'document',
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'html-cache',
-              networkTimeoutSeconds: 3,
-              cacheableResponse: {
-                statuses: [0, 200]
-              },
-              expiration: {
-                maxEntries: 20,
-                maxAgeSeconds: 60 // 1分钟
-              }
-            }
-          },
+
           {
             urlPattern: /.*\.(js|css)$/,
             handler: 'StaleWhileRevalidate',
@@ -107,6 +98,7 @@ export default defineConfig({
 
         navigateFallbackDenylist: [
           /^\/sub\/.*/,
+          /^\/cdn-cgi\/.*/,
           /^\/[^/]+\/[^/]+(\?.*)?$/
         ],
       }

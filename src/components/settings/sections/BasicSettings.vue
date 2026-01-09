@@ -55,6 +55,51 @@ defineProps({
         功能控制
       </h3>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- 订阅自动更新间隔 -->
+        <div
+          class="flex flex-col p-4 bg-gray-50 dark:bg-gray-900/50 border border-gray-100 dark:border-gray-700 rounded-lg">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <p class="text-sm font-medium text-gray-900 dark:text-gray-200">订阅自动更新间隔</p>
+              <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">页面打开时自动刷新订阅节点数和流量</p>
+            </div>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <div class="flex items-center gap-1">
+              <input
+                type="number"
+                :value="![0, 30, 60, 120].includes(settings.autoUpdateInterval) ? settings.autoUpdateInterval : ''"
+                @input="e => { const v = parseInt(e.target.value); if (v >= 5) settings.autoUpdateInterval = v; }"
+                placeholder="自定义"
+                min="5"
+                class="w-20 px-2 py-1.5 text-xs bg-gray-200 dark:bg-gray-700 border-0 rounded-md text-gray-700 dark:text-gray-300 placeholder-gray-500 focus:ring-1 focus:ring-indigo-500"
+              >
+              <span class="text-xs text-gray-500 dark:text-gray-400">分钟</span>
+            </div>
+            <button
+              v-for="option in [
+                { value: 0, label: '禁用' },
+                { value: 30, label: '30分钟' },
+                { value: 60, label: '1小时' },
+                { value: 120, label: '2小时' }
+              ]"
+              :key="option.value"
+              @click="settings.autoUpdateInterval = option.value"
+              :class="[
+                'px-3 py-1.5 text-xs font-medium rounded-md transition-colors',
+                settings.autoUpdateInterval === option.value
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+              ]"
+            >
+              {{ option.label }}
+            </button>
+          </div>
+          <p v-if="settings.autoUpdateInterval === 0" class="text-xs text-amber-600 dark:text-amber-400 mt-2">
+            ⚠️ 自动更新已禁用，订阅信息需手动刷新
+          </p>
+        </div>
+
         <!-- 访问日志 -->
         <div
           class="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900/50 border border-gray-100 dark:border-gray-700 rounded-lg">
@@ -151,6 +196,26 @@ defineProps({
               <input type="checkbox" v-model="disguiseConfig.enabled">
               <span class="slider"></span>
             </label>
+          </div>
+
+          <!-- 自定义登录路径设置 (Always visible/editable even if Disguise is off, or maybe only if useful? 
+               Requirements say "Customize login path, display login box... regardless of open/close public page") 
+               So this should probably be outside the v-show="disguiseConfig.enabled" OR separate. 
+               But it's closely related to access control. Let's put it above the disguise details or inside.
+               Actually, putting it as a separate block in "Web Access Control" is better. 
+          -->
+          <div class="pt-4 border-t border-gray-100 dark:border-gray-700">
+             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">自定义管理后台路径</label>
+             <div class="relative rounded-md shadow-xs max-w-md">
+                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <span class="text-gray-500 sm:text-sm">/</span>
+                </div>
+                <input type="text" v-model="settings.customLoginPath" placeholder="默认: login"
+                  class="block w-full pl-6 px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:text-white">
+             </div>
+             <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+               设置后，只有访问此路径才能进入登录页面。默认路径 <code>/login</code> 将失效（除非未设置）。
+             </p>
           </div>
 
             <div v-show="disguiseConfig.enabled"
