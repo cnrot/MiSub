@@ -8,6 +8,7 @@ import { useToastStore } from './stores/toast.js'
 
 // 全局错误处理
 if (typeof window !== 'undefined') {
+  console.debug('[MiSub] Error Handler Loaded (v2026-01-11-fix-link-error)');
   const isLocalHost = ['localhost', '127.0.0.1'].includes(window.location.hostname);
 
   const clearLocalServiceWorker = async () => {
@@ -101,6 +102,19 @@ if (typeof window !== 'undefined') {
       const isThirdParty = resourceUrl && !resourceUrl.startsWith(window.location.origin);
       if (isThirdParty) {
         console.debug('[Resource Load] Ignoring third-party resource error:', resourceUrl);
+        return;
+      }
+
+      // 忽略 LINK 标签的加载错误 (通常是 modulepreload 失败，不影响主应用运行)
+      if (event.target.tagName === 'LINK') {
+        console.warn('[Resource Load] Ignoring LINK tag error (likely modulepreload):', resourceUrl);
+        return;
+      }
+
+      // 忽略 Cloudflare 基础设施脚本 (Rocket Loader, Analytics 等)
+      // 这些脚本在同源下 (/cdn-cgi/...)，但由 CF 注入，常被隐私设置拦截
+      if (resourceUrl && resourceUrl.includes('/cdn-cgi/')) {
+        console.debug('[Resource Load] Ignoring Cloudflare infrastructure error:', resourceUrl);
         return;
       }
 
