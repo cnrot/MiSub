@@ -1,6 +1,6 @@
 <script setup>
-import { defineAsyncComponent, onMounted, watch } from 'vue';
-import { useRoute } from 'vue-router'; // [NEW]
+import { defineAsyncComponent, onMounted, watch, computed } from 'vue'; // [UPDATED] added computed
+import { useRoute } from 'vue-router';
 import { useThemeStore } from './stores/theme';
 import { useSessionStore } from './stores/session';
 import { useToastStore } from './stores/toast';
@@ -11,7 +11,7 @@ import NavBar from './components/layout/NavBar.vue';
 
 // Lazy components
 const Login = defineAsyncComponent(() => import('./components/modals/Login.vue'));
-const NotFound = defineAsyncComponent(() => import('./views/NotFound.vue')); // [NEW] Use for secure fallback
+const NotFound = defineAsyncComponent(() => import('./views/NotFound.vue'));
 const Toast = defineAsyncComponent(() => import('./components/ui/Toast.vue'));
 const Footer = defineAsyncComponent(() => import('./components/layout/Footer.vue'));
 const PWAUpdatePrompt = defineAsyncComponent(() => import('./components/features/PWAUpdatePrompt.vue'));
@@ -19,7 +19,7 @@ const PWADevTools = defineAsyncComponent(() => import('./components/features/PWA
 const Dashboard = defineAsyncComponent(() => import('./components/features/Dashboard/Dashboard.vue'));
 const Header = defineAsyncComponent(() => import('./components/layout/Header.vue'));
 
-const route = useRoute(); // [NEW]
+const route = useRoute();
 const themeStore = useThemeStore();
 const { theme } = storeToRefs(themeStore);
 const { initTheme } = themeStore;
@@ -37,22 +37,38 @@ const { isDirty, saveState } = storeToRefs(dataStore);
 const uiStore = useUIStore();
 const { layoutMode } = storeToRefs(uiStore);
 
+// [NEW] Computed properties for layout logic
+const isLoggedIn = computed(() => sessionState.value === 'loggedIn');
+const isPublicRoute = computed(() => route.meta.isPublic);
+
+const showModernNavBar = computed(() => isLoggedIn.value && layoutMode.value === 'modern');
+const showLegacyHeader = computed(() => !showModernNavBar.value && (isLoggedIn.value || isPublicRoute.value));
+
+const shouldCenterMain = computed(() => 
+  sessionState.value !== 'loggedIn' && 
+  sessionState.value !== 'loading' && 
+  !isPublicRoute.value
+);
+
+const showSavePrompt = computed(() => 
+  layoutMode.value === 'modern' && (isDirty.value || saveState.value === 'success')
+);
+
+// Determine which login component to show (Custom Path -> NotFound, else -> Login)
+const loginComponent = computed(() => 
+  sessionStore.publicConfig?.customLoginPath ? NotFound : Login
+);
+
 onMounted(async () => {
-
-
   initTheme();
   await checkSession();
-  
-  if (sessionState.value === 'loggedIn') {
-      await dataStore.fetchData();
-  }
 });
 
 watch(sessionState, async (newVal) => {
-    if (newVal === 'loggedIn') {
-        await dataStore.fetchData();
-    }
-});
+  if (newVal === 'loggedIn') {
+    await dataStore.fetchData();
+  }
+}, { immediate: true });
 
 const handleSave = async () => {
    await dataStore.saveData();
@@ -69,49 +85,45 @@ const handleDiscard = async () => {
     :class="theme" 
     class="min-h-screen flex flex-col text-gray-800 dark:text-gray-200 transition-colors duration-300 bg-gray-100 dark:bg-gray-950"
   >
-    <!-- Show NavBar if logged in and modern mode OR if public route and modern mode -->
+    <!-- Navigation -->
     <NavBar 
-      v-if="(sessionState === 'loggedIn' || route.meta.isPublic) && layoutMode === 'modern'" 
-      :is-logged-in="sessionState === 'loggedIn'" 
+      v-if="showModernNavBar" 
+      :is-logged-in="true" 
       @logout="logout" 
     />
-    <!-- Show Header if logged in and legacy mode OR if public route and legacy mode -->
     <Header 
-      v-else-if="(sessionState === 'loggedIn' || route.meta.isPublic)" 
-      :is-logged-in="sessionState === 'loggedIn'" 
+      v-else-if="showLegacyHeader" 
+      :is-logged-in="isLoggedIn" 
       @logout="logout" 
     />
-    
-    <!-- IF NOT LOGGED IN, BUT PUBLIC ROUTE (like /explore or /): SHOW HEADER (optional) or just nothing? 
-         The PublicProfilesView has its own header design usually. 
-         Let's keep it clean. If public route, we might not want the main app header if the view handles it.
-         But wait, PublicProfilesView doesn't have a navigation header in the code I saw, just a hero.
-         We might want a simple header or none. The user requested "adding a login button to the top right".
-         So PublicProfilesView will handle its own top bar.
-    -->
 
     <main 
       class="grow w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6"
-      :class="{
-        'flex items-center justify-center': sessionState !== 'loggedIn' && sessionState !== 'loading' && !route.meta.isPublic,
-      }"
+      :class="{ 'flex items-center justify-center': shouldCenterMain }"
     >
       <div v-if="sessionState === 'loading'" class="flex justify-center p-8">Loading...</div>
       
       <!-- LOGGED IN VIEW -->
-      <template v-else-if="sessionState === 'loggedIn'">
+      <template v-else-if="isLoggedIn">
           <Transition name="slide-fade">
-            <div v-if="layoutMode === 'modern' && (isDirty || saveState === 'success')" 
-                class="sticky top-20 z-40 mb-6 p-4 rounded-lg shadow-lg flex items-center justify-between transition-all duration-300 backdrop-blur-md"
-                :class="saveState === 'success' ? 'bg-teal-500/10 ring-1 ring-teal-500/20' : 'bg-white/80 dark:bg-gray-800/80 ring-1 ring-indigo-500/30'">
-                <p class="text-sm font-medium" 
-                :class="saveState === 'success' ? 'text-teal-700 dark:text-teal-300' : 'text-indigo-700 dark:text-indigo-300'">
-                {{ saveState === 'success' ? '保存成功' : '您有未保存的更改' }}
-                </p>
-                <div class="flex items-center gap-3">
-                    <button v-if="saveState !== 'success'" @click="handleDiscard" class="text-sm text-gray-600 dark:text-gray-400 hover:underline">放弃</button>
-                    <button @click="handleSave" :disabled="saveState !== 'idle'" class="px-4 py-1.5 text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-md shadow-sm transition-colors disabled:opacity-50">
-                        {{ saveState === 'saving' ? '保存中...' : (saveState === 'success' ? '已保存' : '保存更改') }}
+            <div v-if="showSavePrompt" 
+                class="fixed bottom-24 md:bottom-auto md:top-24 left-1/2 -translate-x-1/2 z-40 p-1.5 pr-2 rounded-full shadow-2xl flex items-center gap-3 transition-all duration-300 backdrop-blur-xl border border-white/20 dark:border-white/10"
+                :class="saveState === 'success' ? 'bg-teal-500/20 text-teal-600 dark:text-teal-300 shadow-teal-500/10' : 'bg-white/80 dark:bg-gray-900/80 shadow-black/10'">
+                
+                <div class="pl-2 pr-1 flex items-center gap-2">
+                    <span v-if="saveState === 'success'" class="w-2 h-2 rounded-full bg-teal-500 animate-pulse"></span>
+                    <span v-else class="w-2 h-2 rounded-full bg-orange-500 animate-pulse"></span>
+                    <p class="text-xs font-semibold whitespace-nowrap">
+                        {{ saveState === 'success' ? '已保存更改' : '未保存更改' }}
+                    </p>
+                </div>
+
+                <div class="flex items-center gap-1">
+                    <button v-if="saveState !== 'success'" @click="handleDiscard" class="px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-white transition-colors rounded-full hover:bg-gray-100 dark:hover:bg-white/10">
+                        放弃
+                    </button>
+                    <button @click="handleSave" :disabled="saveState !== 'idle'" class="px-4 py-1.5 text-xs font-bold bg-primary-600 hover:bg-primary-500 text-white rounded-full shadow-lg shadow-primary-500/30 transition-all hover:-translate-y-0.5 disabled:opacity-50 disabled:transform-none">
+                        {{ saveState === 'saving' ? '保存中...' : (saveState === 'success' ? '完成' : '立即保存') }}
                     </button>
                 </div>
             </div>
@@ -127,7 +139,7 @@ const handleDiscard = async () => {
       </template>
 
       <!-- PUBLIC ROUTE VIEW (Not logged in, but isPublic) -->
-      <template v-else-if="route.meta.isPublic">
+      <template v-else-if="isPublicRoute">
          <router-view v-slot="{ Component }">
             <transition name="fade" mode="out-in">
               <component :is="Component" />
@@ -137,14 +149,8 @@ const handleDiscard = async () => {
       
       <!-- LOGIN VIEW (Not logged in, not public) -->
       <template v-else>
-         <!-- 
-           If a Custom Login Path is configured, accessing protected routes directly (like /settings, /nodes)
-           should NOT trigger the Login component (which reveals the login box).
-           Instead, it should show 404/Disguise.
-           Only if NO custom path is set, do we fallback to the default Login component.
-         -->
          <component 
-            :is="sessionStore.publicConfig?.customLoginPath ? NotFound : Login" 
+            :is="loginComponent" 
             :login="login" 
          />
       </template>

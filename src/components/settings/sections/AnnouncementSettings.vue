@@ -1,6 +1,7 @@
 <script setup>
 import { computed, watch } from 'vue';
 import DOMPurify from 'dompurify';
+import Switch from '../../ui/Switch.vue';
 
 const props = defineProps({
     settings: {
@@ -50,7 +51,7 @@ const handleContentUpdate = () => {
     <div class="space-y-6">
         <!-- 头部说明 -->
         <div
-            class="bg-white dark:bg-gray-800 rounded-lg p-6 space-y-4 border border-gray-100 dark:border-gray-700 elevation-2 hover:elevation-3 transition-shadow duration-300">
+            class="bg-white dark:bg-gray-800 rounded-3xl p-6 space-y-6 border border-gray-100 dark:border-gray-700 shadow-sm animate-fade-in-down">
             <h3 class="text-base font-semibold text-gray-900 dark:text-white flex items-center gap-2">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-indigo-500" fill="none" viewBox="0 0 24 24"
                     stroke="currentColor">
@@ -64,35 +65,35 @@ const handleContentUpdate = () => {
             </p>
 
             <div
-                class="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900/50 border border-gray-100 dark:border-gray-700 rounded-lg">
+                class="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900/50 border border-gray-100 dark:border-gray-700 rounded-xl">
                 <div>
                     <p class="text-sm font-medium text-gray-900 dark:text-gray-200">启用公告展示</p>
                     <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">关闭后所有的公告将从公开页隐藏</p>
                 </div>
-                <label class="toggle-switch flex-shrink-0">
-                    <input type="checkbox" v-model="announcement.enabled" @change="handleContentUpdate">
-                    <span class="slider"></span>
-                </label>
+                <Switch 
+                    v-model="announcement.enabled"
+                    @change="handleContentUpdate"
+                />
             </div>
         </div>
 
         <!-- 内容编辑 -->
         <div v-if="announcement.enabled"
-            class="bg-white dark:bg-gray-800 rounded-lg p-6 space-y-6 border border-gray-100 dark:border-gray-700 shadow-sm animate-fade-in-down">
+            class="bg-white dark:bg-gray-800 rounded-xl p-6 space-y-6 border border-gray-100 dark:border-gray-700 shadow-sm animate-fade-in-down">
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <!-- 标题 -->
                 <div>
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">公告标题</label>
                     <input type="text" v-model="announcement.title" @input="handleContentUpdate" placeholder="例如：系统维护通知"
-                        class="block w-full px-3 py-2 bg-gray-50 dark:bg-gray-900/50 border border-gray-300 dark:border-gray-600 rounded-md shadow-xs focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:text-white transition-colors">
+                        class="block w-full px-3 py-2 bg-gray-50 dark:bg-gray-900/50 border border-gray-300 dark:border-gray-600 rounded-xl shadow-xs focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:text-white transition-colors">
                 </div>
 
                 <!-- 类型 -->
                 <div>
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">公告类型</label>
                     <select v-model="announcement.type" @change="handleContentUpdate"
-                        class="block w-full px-3 py-2 bg-gray-50 dark:bg-gray-900/50 border border-gray-300 dark:border-gray-600 rounded-md shadow-xs focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:text-white transition-colors">
+                        class="block w-full px-3 py-2 bg-gray-50 dark:bg-gray-900/50 border border-gray-300 dark:border-gray-600 rounded-xl shadow-xs focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:text-white transition-colors">
                         <option value="info">ℹ️ 普通消息 (Info)</option>
                         <option value="success">✅ 成功/更新 (Success)</option>
                         <option value="warning">⚠️ 警告/维护 (Warning)</option>
@@ -107,7 +108,7 @@ const handleContentUpdate = () => {
                 <div class="relative">
                     <textarea v-model="announcement.content" @input="handleContentUpdate" rows="6"
                         placeholder="请输入公告详细内容，支持 HTML 标签用于排版。"
-                        class="block w-full px-3 py-2 bg-gray-50 dark:bg-gray-900/50 border border-gray-300 dark:border-gray-600 rounded-md shadow-xs focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:text-white transition-colors font-mono"></textarea>
+                        class="block w-full px-3 py-2 bg-gray-50 dark:bg-gray-900/50 border border-gray-300 dark:border-gray-600 rounded-xl shadow-xs focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:text-white transition-colors font-mono"></textarea>
                     <div class="absolute bottom-2 right-2 text-xs text-gray-400">
                         支持 HTML
                     </div>
@@ -129,7 +130,7 @@ const handleContentUpdate = () => {
 
             <!-- 预览区域 (可选) -->
             <div
-                class="mt-4 p-4 border border-dashed border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900/30">
+                class="mt-4 p-4 border border-dashed border-gray-300 dark:border-gray-600 rounded-2xl bg-gray-50 dark:bg-gray-900/30">
                 <h4 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">实时预览</h4>
                 <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border p-4" :class="{
                     'border-blue-100 bg-blue-50/50 dark:border-blue-900/30 dark:bg-blue-900/10': announcement.type === 'info',
@@ -161,59 +162,7 @@ const handleContentUpdate = () => {
 
 <style scoped>
 /* Toggle Switch CSS - Reused */
-.toggle-switch {
-    position: relative;
-    display: inline-block;
-    width: 44px;
-    height: 24px;
-}
 
-.toggle-switch input {
-    opacity: 0;
-    width: 0;
-    height: 0;
-}
-
-.slider {
-    position: absolute;
-    cursor: pointer;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: #ccc;
-    transition: .4s;
-    border-radius: 34px;
-}
-
-.dark .slider {
-    background-color: #4b5563;
-}
-
-.slider:before {
-    position: absolute;
-    content: "";
-    height: 20px;
-    width: 20px;
-    left: 2px;
-    bottom: 2px;
-    background-color: white;
-    transition: .4s;
-    border-radius: 50%;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-}
-
-input:checked+.slider {
-    background-color: #4f46e5;
-}
-
-.dark input:checked+.slider {
-    background-color: #16a34a;
-}
-
-input:checked+.slider:before {
-    transform: translateX(20px);
-}
 
 .animate-fade-in-down {
     animation: fadeInDown 0.3s ease-out;

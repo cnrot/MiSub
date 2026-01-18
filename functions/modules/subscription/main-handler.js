@@ -1,5 +1,5 @@
 import { StorageFactory } from '../../storage-adapter.js';
-import { migrateConfigSettings, formatBytes, getCallbackToken } from '../utils.js';
+import { migrateConfigSettings, formatBytes, getCallbackToken, getPublicBaseUrl } from '../utils.js';
 import { generateCombinedNodeList } from '../../services/subscription-service.js';
 import { sendEnhancedTgNotification } from '../notifications.js';
 import { KV_KEY_SUBS, KV_KEY_PROFILES, KV_KEY_SETTINGS, DEFAULT_SETTINGS as defaultSettings } from '../config.js';
@@ -10,6 +10,7 @@ import { buildSubconverterUrlVariants, getSubconverterCandidates } from './subco
 import { resolveNodeListWithCache } from './cache-manager.js';
 import { logAccessError, logAccessSuccess, shouldSkipLogging as shouldSkipAccessLog } from './access-logger.js';
 import { isBrowserAgent } from './user-agent-utils.js'; // [Added] Import centralized util
+import { authMiddleware } from '../auth-middleware.js';
 
 /**
  * 处理MiSub订阅请求
@@ -37,15 +38,13 @@ export async function handleMisubRequest(context) {
 
     const isBrowser = isBrowserAgent(userAgentHeader);
 
-    if (config.disguise?.enabled && isBrowser && !url.searchParams.has('callback_token')) {
-        // [Smart Camouflage] Allow Admin Access
-        // Check if the user has a valid admin session cookie
-        const { authMiddleware } = await import('../auth-middleware.js');
-        const isAuthenticated = await authMiddleware(request, env); // Returns boolean
+    const isAuthenticated = await authMiddleware(request, env);
 
-        if (!isAuthenticated) {
-            return createDisguiseResponse(config.disguise, request.url);
-        }
+    if (config.disguise?.enabled && isBrowser && !url.searchParams.has('callback_token') && !isAuthenticated) {
+        // [Smart Camouflage]
+        // If disguise is enabled and it's a browser request (not a known client),
+        // show the disguise page unless the user is authenticated.
+        return createDisguiseResponse(config.disguise, request.url);
     }
 
     const { token, profileIdentifier } = resolveRequestContext(url, config, allProfiles);
@@ -159,6 +158,9 @@ export async function handleMisubRequest(context) {
     if (!effectiveSubConverter || effectiveSubConverter.trim() === '') {
         return new Response('Subconverter backend is not configured.', { status: 500 });
     }
+
+    const shouldSkipCertificateVerify = Boolean(config.subConverterScv);
+    const shouldEnableUdp = Boolean(config.subConverterUdp);
 
     let targetFormat = url.searchParams.get('target');
     if (!targetFormat) {
@@ -364,7 +366,8 @@ export async function handleMisubRequest(context) {
 
     const callbackToken = await getCallbackToken(env);
     const callbackPath = profileIdentifier ? `/${token}/${profileIdentifier}` : `/${token}`;
-    const callbackUrl = `${url.protocol}//${url.host}${callbackPath}?target=base64&callback_token=${callbackToken}`;
+    const publicBaseUrl = getPublicBaseUrl(env, url);
+    const callbackUrl = `${publicBaseUrl.origin}${callbackPath}?target=base64&callback_token=${callbackToken}`;
     if (url.searchParams.get('callback_token') === callbackToken) {
         const headers = { "Content-Type": "text/plain; charset=utf-8", 'Cache-Control': 'no-store, no-cache' };
         return new Response(base64Content, { headers });
@@ -381,8 +384,12 @@ export async function handleMisubRequest(context) {
             try {
                 subconverterUrl.searchParams.set('target', targetFormat);
                 subconverterUrl.searchParams.set('url', callbackUrl);
-                subconverterUrl.searchParams.set('scv', 'true');
-                subconverterUrl.searchParams.set('udp', 'true');
+                if (shouldSkipCertificateVerify) {
+                    subconverterUrl.searchParams.set('scv', 'true');
+                }
+                if (shouldEnableUdp) {
+                    subconverterUrl.searchParams.set('udp', 'true');
+                }
                 subconverterUrl.searchParams.set('emoji', shouldUseEmoji ? 'true' : 'false');  // 根据模板动态设置 emoji 参数
                 if ((targetFormat === 'clash' || targetFormat === 'loon' || targetFormat === 'surge') && effectiveSubConfig && effectiveSubConfig.trim() !== '') {
                     subconverterUrl.searchParams.set('config', effectiveSubConfig);
