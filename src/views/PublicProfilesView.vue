@@ -213,26 +213,15 @@ onMounted(async () => {
 </script>
 
 <template>
-    <div class="min-h-screen bg-gray-50 dark:bg-[#0f111a] transition-colors duration-500 selection:bg-primary-500/30 selection:text-white relative">
+    <div class="min-h-screen bg-transparent transition-colors duration-500 selection:bg-primary-500/30 selection:text-white relative">
         
-        <!-- Global Ambient Background (Fixed & Seamless) -->
-        <div class="fixed inset-0 pointer-events-none overflow-hidden">
-            <!-- Top Glow Base -->
-            <div class="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[600px] bg-gradient-to-b from-primary-200/20 via-primary-100/10 to-transparent dark:from-primary-900/15 dark:via-[#0f111a]/50 dark:to-transparent opacity-70 blur-3xl"></div>
-            
-            <!-- Animated Cosmic Blobs -->
-            <div class="absolute top-[-10%] left-[-10%] w-[800px] h-[800px] rounded-full bg-primary-300/20 dark:bg-primary-600/10 blur-[120px] animate-blob mix-blend-multiply dark:mix-blend-screen opacity-60"></div>
-            <div class="absolute top-[10%] right-[-10%] w-[700px] h-[700px] rounded-full bg-purple-300/20 dark:bg-purple-600/10 blur-[120px] animate-blob animation-delay-2000 mix-blend-multiply dark:mix-blend-screen opacity-60"></div>
-            <div class="absolute bottom-[-20%] left-[20%] w-[900px] h-[900px] rounded-full bg-indigo-300/10 dark:bg-indigo-600/5 blur-[120px] animate-blob animation-delay-4000 mix-blend-multiply dark:mix-blend-screen opacity-50"></div>
-        </div>
-
         <!-- Hero Section (Left Aligned & Open) -->
-        <div class="relative pt-20 pb-20 lg:pt-32 lg:pb-32 z-10 overflow-visible">
+        <div class="relative pt-10 pb-10 lg:pt-16 lg:pb-14 z-10 overflow-visible">
             <div class="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center relative">
                 <!-- Left Content: Text (Wider column for no-wrap) -->
                 <div class="text-left relative z-20 lg:col-span-7 xl:col-span-8">
                     <!-- Badge -->
-                    <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-primary-200/50 dark:border-white/10 bg-white/50 dark:bg-white/5 backdrop-blur-md mb-3 shadow-sm">
+                    <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-primary-200/50 dark:border-white/10 bg-white/50 dark:bg-white/5 backdrop-blur-md mb-8 shadow-sm animate-fade-in-up">
                         <span class="relative flex h-2 w-2">
                           <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary-400 opacity-75"></span>
                           <span class="relative inline-flex rounded-full h-2 w-2 bg-primary-500"></span>
@@ -240,7 +229,7 @@ onMounted(async () => {
                         <span class="text-xs font-bold text-primary-700 dark:text-primary-300 tracking-widest uppercase">Cosmic Selection</span>
                     </div>
 
-                    <h1 class="text-6xl sm:text-7xl lg:text-8xl font-black tracking-tight leading-[1.05] mb-4">
+                    <h1 class="text-6xl sm:text-7xl lg:text-8xl font-black tracking-tight leading-[1.05] mb-8 animate-fade-in-up delay-100">
                         <span class="block text-gray-900 dark:text-white drop-shadow-sm">
                             {{ heroConfig.title1 }}
                         </span>
@@ -249,38 +238,14 @@ onMounted(async () => {
                         </span>
                     </h1>
                     
-                    <p class="text-base md:text-lg text-gray-500 dark:text-gray-400 leading-relaxed font-medium max-w-3xl mb-6 whitespace-nowrap overflow-hidden text-ellipsis">
+                    <p class="text-base md:text-lg text-gray-500 dark:text-gray-400 leading-relaxed font-medium max-w-3xl mb-10 whitespace-nowrap overflow-hidden text-ellipsis animate-fade-in-up delay-200">
                         {{ heroConfig.description }}
                     </p>
                 </div>
 
                 <!-- Right Content: Top-Right Concentric Circles (Bottom-Left Quadrant) -->
                 <!-- -mt-20 lg:-mt-32 pulls it up to the very top edge, countering the parent's padding -->
-                <div class="absolute right-0 top-0 hidden lg:block pointer-events-none opacity-40 mix-blend-multiply dark:mix-blend-screen overflow-visible h-[600px] w-[600px] -mt-20 lg:-mt-32">
-                     <!-- Decorator SVG -->
-                     <svg class="w-full h-full text-primary-500 dark:text-primary-400" viewBox="0 0 400 400" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <defs>
-                            <linearGradient id="arcGradient" x1="100%" y1="0%" x2="0%" y2="100%">
-                                <stop offset="0%" stop-color="currentColor" stop-opacity="0.3" />
-                                <stop offset="100%" stop-color="currentColor" stop-opacity="0.0" />
-                            </linearGradient>
-                        </defs>
-                        <!-- Center is Top-Right (400, 0) -->
-                        <!-- Drawing Arcs: M (Start X, Start Y) A (rx ry x-axis-rotation large-arc-flag sweep-flag) (End X, End Y) -->
-                        
-                        <!-- Ring 1 (Smallest) -->
-                        <path d="M400 80 A 80 80 0 0 1 320 0" stroke="url(#arcGradient)" stroke-width="20" stroke-linecap="round" />
-                        
-                        <!-- Ring 2 -->
-                        <path d="M400 160 A 160 160 0 0 1 240 0" stroke="url(#arcGradient)" stroke-width="15" stroke-linecap="round" />
-                        
-                        <!-- Ring 3 -->
-                        <path d="M400 240 A 240 240 0 0 1 160 0" stroke="url(#arcGradient)" stroke-width="10" stroke-linecap="round" />
-                        
-                        <!-- Ring 4 -->
-                        <path d="M400 320 A 320 320 0 0 1 80 0" stroke="url(#arcGradient)" stroke-width="8" stroke-linecap="round" />
-                     </svg>
-                </div>
+
             </div>
         </div>
 
@@ -294,115 +259,122 @@ onMounted(async () => {
             </div>
 
         <!-- Content Section -->
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 -mt-8 relative z-20">
+        <div class="relative z-20 pb-32">
+            
+            <!-- Subscription Section -->
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <!-- Announcement Section -->
+                <AnnouncementCard v-if="announcement && announcement.enabled" :announcement="announcement" class="mb-16" />
 
-            <!-- Announcement Section -->
-            <AnnouncementCard v-if="announcement && announcement.enabled" :announcement="announcement" class="mb-12" />
-
-            <!-- Loading State -->
-            <div v-if="loading" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                <div v-for="i in 6" :key="i"
-                    class="h-[400px] bg-white dark:bg-gray-800 rounded-3xl p-6 shadow-sm border border-gray-100 dark:border-gray-700 animate-pulse">
-                    <div class="h-8 bg-gray-200 dark:bg-gray-700 rounded-lg w-2/3 mb-6"></div>
-                    <div class="h-4 bg-gray-200 dark:bg-gray-700 rounded w-full mb-3"></div>
-                    <div class="h-4 bg-gray-200 dark:bg-gray-700 rounded w-5/6 mb-8"></div>
-                    <div class="flex gap-4 mb-8">
-                        <div class="flex-1 h-20 bg-gray-100 dark:bg-gray-700/50 rounded-2xl"></div>
-                        <div class="flex-1 h-20 bg-gray-100 dark:bg-gray-700/50 rounded-2xl"></div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Error State -->
-            <div v-else-if="error" class="text-center py-20 bg-white/50 dark:bg-gray-800/50 rounded-3xl border border-red-100 dark:border-red-900/30 backdrop-blur-sm">
-                <div class="inline-flex items-center justify-center w-20 h-20 rounded-full bg-red-50 dark:bg-red-900/20 mb-6">
-                    <BaseIcon :path="ICONS.error" className="w-10 h-10 text-red-500 dark:text-red-400" />
-                </div>
-                <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-2">加载失败</h3>
-                <p class="text-gray-500 dark:text-gray-400 mb-6">{{ error }}</p>
-                <button @click="fetchPublicProfiles"
-                    class="px-6 py-2.5 bg-primary-600 hover:bg-primary-700 text-white font-medium rounded-xl shadow-lg shadow-primary-600/20 transition-all active:scale-95">
-                    重试
-                </button>
-            </div>
-
-            <!-- Empty State -->
-            <div v-else-if="publicProfiles.length === 0" class="text-center py-32 bg-white/50 dark:bg-gray-800/50 rounded-3xl border border-gray-100 dark:border-gray-700/50 backdrop-blur-sm">
-                <div class="inline-flex items-center justify-center w-24 h-24 rounded-3xl bg-gray-50 dark:bg-gray-700/50 mb-6 transform rotate-3">
-                    <BaseIcon :path="ICONS.empty" className="w-12 h-12 text-gray-400" />
-                </div>
-                <h3 class="text-2xl font-bold text-gray-900 dark:text-white mb-3">暂无公开订阅</h3>
-                <p class="text-gray-500 dark:text-gray-400 max-w-sm mx-auto">
-                    管理员暂时没有分享任何公开订阅组，请稍后再来看看。
-                </p>
-            </div>
-
-            <!-- Profile Grid -->
-            <ProfileGrid v-else :profiles="publicProfiles" :is-qr-expanded="isQRExpanded"
-                :profile-token="config.profileToken || 'profiles'" @quick-import="handleQuickImport"
-                @toggle-qr="toggleQRCode" @preview="handlePreview" @copy-link="copyLink" @download-qr="downloadQRCode"
-                @register-canvas="registerQrCanvas" />
-
-            <!-- Clients Section -->
-            <div class="mt-32 mb-20">
-                <div class="text-center mb-16 relative">
-                    <div class="absolute inset-0 flex items-center" aria-hidden="true">
-                        <div class="w-full border-t border-gray-200 dark:border-gray-800"></div>
-                    </div>
-                    <div class="relative inline-flex flex-col items-center bg-gray-50 dark:bg-black px-8 py-4 rounded-3xl border border-gray-100 dark:border-gray-800">
-                        <span class="text-sm font-semibold tracking-wider text-primary-600 dark:text-primary-400 uppercase mb-1">Tools</span>
-                        <h2 class="text-3xl font-extrabold text-gray-900 dark:text-white">
-                            必备客户端
-                        </h2>
+                <!-- Loading State -->
+                <div v-if="loading" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                    <div v-for="i in 6" :key="i"
+                        class="h-[300px] bg-white dark:bg-gray-800 rounded-3xl p-6 shadow-sm border border-gray-100 dark:border-gray-700 animate-pulse">
+                        <div class="flex items-center gap-4 mb-6">
+                            <div class="h-12 w-12 bg-gray-200 dark:bg-gray-700 rounded-xl"></div>
+                            <div class="h-6 bg-gray-200 dark:bg-gray-700 rounded w-1/2"></div>
+                        </div>
+                        <div class="h-4 bg-gray-200 dark:bg-gray-700 rounded w-full mb-3"></div>
+                        <div class="h-4 bg-gray-200 dark:bg-gray-700 rounded w-5/6 mb-8"></div>
+                        <div class="mt-auto h-12 bg-gray-100 dark:bg-gray-700/50 rounded-xl"></div>
                     </div>
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                    <div v-for="client in clients" :key="client.name"
-                        class="group relative glass-panel dark:bg-white/5 backdrop-blur-xl rounded-3xl p-8 hover:shadow-2xl hover:border-primary-500/20 transition-all duration-300 transform hover:-translate-y-1">
-                        
-                        <div class="flex items-start gap-5">
-                            <div class="h-16 w-16 rounded-2xl flex items-center justify-center text-4xl shadow-lg bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 border border-gray-100 dark:border-gray-700 group-hover:scale-110 transition-transform duration-300 shrink-0">
-                                <img v-if="client.icon && client.icon.includes('/')" :src="client.icon"
-                                    :alt="client.name" class="w-full h-full object-contain p-2.5" />
-                                <span v-else>{{ client.icon }}</span>
-                            </div>
+                <!-- Error State -->
+                <div v-else-if="error" class="text-center py-20 bg-white/50 dark:bg-gray-800/50 rounded-3xl border border-red-100 dark:border-red-900/30 backdrop-blur-sm">
+                    <div class="inline-flex items-center justify-center w-20 h-20 rounded-full bg-red-50 dark:bg-red-900/20 mb-6">
+                        <BaseIcon :path="ICONS.error" className="w-10 h-10 text-red-500 dark:text-red-400" />
+                    </div>
+                    <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-2">加载失败</h3>
+                    <p class="text-gray-500 dark:text-gray-400 mb-6">{{ error }}</p>
+                    <button @click="fetchPublicProfiles"
+                        class="px-6 py-2.5 bg-primary-600 hover:bg-primary-700 text-white font-medium rounded-xl shadow-lg shadow-primary-600/20 transition-all active:scale-95">
+                        重试
+                    </button>
+                </div>
+
+                <!-- Empty State -->
+                <div v-else-if="publicProfiles.length === 0" class="text-center py-32 bg-white/50 dark:bg-gray-800/50 rounded-3xl border border-gray-100 dark:border-gray-700/50 backdrop-blur-sm">
+                    <div class="inline-flex items-center justify-center w-24 h-24 rounded-3xl bg-gray-50 dark:bg-gray-700/50 mb-6 transform rotate-3">
+                        <BaseIcon :path="ICONS.empty" className="w-12 h-12 text-gray-400" />
+                    </div>
+                    <h3 class="text-2xl font-bold text-gray-900 dark:text-white mb-3">暂无公开订阅</h3>
+                    <p class="text-gray-500 dark:text-gray-400 max-w-sm mx-auto">
+                        管理员暂时没有分享任何公开订阅组，请稍后再来看看。
+                    </p>
+                </div>
+
+                <!-- Profile Grid -->
+                <div v-else class="animate-fade-in-up delay-300">
+                    <ProfileGrid :profiles="publicProfiles" :is-qr-expanded="isQRExpanded"
+                        :profile-token="config.profileToken || 'profiles'" @quick-import="handleQuickImport"
+                        @toggle-qr="toggleQRCode" @preview="handlePreview" @copy-link="copyLink" @download-qr="downloadQRCode"
+                        @register-canvas="registerQrCanvas" />
+                </div>
+            </div>
+
+            <!-- Clients Section (Visually Separated) -->
+            <div class="mt-32 pt-20 pb-10 border-t border-transparent bg-transparent dark:bg-transparent backdrop-blur-sm">
+                <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div class="text-center mb-16 relative">
+                        <div class="relative inline-flex flex-col items-center">
+                            <span class="text-sm font-bold tracking-widest text-primary-600 dark:text-primary-400 uppercase mb-2">Essential Tools</span>
+                            <h2 class="text-3xl md:text-4xl font-extrabold text-gray-900 dark:text-white tracking-tight">
+                                必备客户端
+                            </h2>
+                            <p class="mt-4 text-gray-500 dark:text-gray-400 max-w-2xl mx-auto">
+                                为了获得最佳体验，请下载我们推荐的客户端软件。覆盖全平台，简单易用。
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
+                        <div v-for="client in clients" :key="client.name"
+                            class="group relative glass-panel dark:bg-white/5 backdrop-blur-2xl rounded-[2rem] p-6 shadow-xl border border-white/40 dark:border-white/5 hover:border-primary-500/30 transition-all duration-300 hover:shadow-primary-500/5">
                             
-                            <div class="flex-1 min-w-0">
-                                <div class="flex items-center gap-3 mb-1">
-                                    <h3 class="text-xl font-bold text-gray-900 dark:text-white truncate">
-                                        {{ client.name }}
-                                    </h3>
-                                    <span v-if="client.version"
-                                        class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-600">
-                                        {{ client.version }}
-                                    </span>
+                            <div class="flex items-start gap-5">
+                                <div class="h-14 w-14 rounded-2xl flex items-center justify-center text-3xl shadow-sm bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/5 group-hover:scale-105 transition-transform duration-300 shrink-0">
+                                    <img v-if="client.icon && client.icon.includes('/')" :src="client.icon"
+                                        :alt="client.name" class="w-full h-full object-contain p-2" />
+                                    <span v-else>{{ client.icon }}</span>
                                 </div>
                                 
-                                <div class="flex flex-wrap gap-1.5 mt-2">
-                                    <span v-for="platform in client.platforms" :key="platform"
-                                        class="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium border"
-                                        :class="getPlatformStyle(platform)">
-                                        {{ getPlatformLabel(platform) }}
-                                    </span>
+                                <div class="flex-1 min-w-0 pt-1">
+                                    <div class="flex items-center justify-between mb-2">
+                                        <h3 class="text-lg font-bold text-gray-900 dark:text-white truncate">
+                                            {{ client.name }}
+                                        </h3>
+                                    </div>
+                                    <div class="flex flex-wrap gap-1 mb-2">
+                                        <span v-for="platform in client.platforms" :key="platform"
+                                            class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border"
+                                            :class="{
+                                                'bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-900/50': platform === 'windows',
+                                                'bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-700/50 dark:text-gray-300 dark:border-gray-600': platform === 'macos' || platform === 'ios',
+                                                'bg-green-50 text-green-600 border-green-200 dark:bg-green-900/20 dark:text-green-300 dark:border-green-900/50': platform === 'android',
+                                                'bg-orange-50 text-orange-600 border-orange-200 dark:bg-orange-900/20 dark:text-orange-300 dark:border-orange-900/50': platform === 'linux'
+                                            }">
+                                            {{ getPlatformLabel(platform) }}
+                                        </span>
+                                    </div>
+                                    <p class="text-gray-500 dark:text-gray-400 text-sm line-clamp-2 leading-relaxed h-12">
+                                        {{ client.description }}
+                                    </p>
                                 </div>
                             </div>
-                        </div>
 
-                        <p class="mt-6 text-gray-500 dark:text-gray-400 text-sm h-10 line-clamp-2 leading-relaxed">
-                            {{ client.description }}
-                        </p>
-
-                        <div class="mt-8 pt-6 border-t border-gray-100 dark:border-white/5">
-                            <a :href="client.url" target="_blank"
-                                class="flex items-center justify-between w-full group/btn cursor-pointer">
-                                <span class="font-bold text-gray-900 dark:text-white group-hover/btn:text-primary-600 dark:group-hover/btn:text-primary-400 transition-colors">
-                                    获取下载
+                            <div class="mt-6 flex items-center justify-between pt-4 border-t border-gray-50 dark:border-white/5">
+                                <span v-if="client.version" class="text-xs font-mono text-gray-400 bg-gray-50 dark:bg-white/5 px-2 py-1 rounded-md">
+                                    {{ client.version }}
                                 </span>
-                                <div class="h-8 w-8 rounded-full bg-gray-50 dark:bg-gray-800 flex items-center justify-center group-hover/btn:bg-primary-50 dark:group-hover/btn:bg-primary-900/30 transition-colors">
-                                    <BaseIcon :path="ICONS.download" className="w-4 h-4 text-gray-400 group-hover/btn:text-primary-600 dark:group-hover/btn:text-primary-400 transition-colors" />
-                                </div>
-                            </a>
+                                <span v-else class="text-xs text-gray-400">稳定版</span>
+
+                                <a :href="client.url" target="_blank"
+                                    class="text-sm font-bold text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 flex items-center gap-1 group/link">
+                                    获取下载
+                                    <BaseIcon :path="ICONS.download" className="w-4 h-4 transform group-hover/link:translate-x-0.5 transition-transform" />
+                                </a>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -422,19 +394,28 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-/* Gradient Animation */
-@keyframes blob {
-    0% { transform: translate(0px, 0px) scale(1); }
-    33% { transform: translate(30px, -50px) scale(1.1); }
-    66% { transform: translate(-20px, 20px) scale(0.9); }
-    100% { transform: translate(0px, 0px) scale(1); }
+
+
+/* Entrance Animations */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
-.animate-blob {
-    animation: blob 7s infinite;
+
+.animate-fade-in-up {
+    animation: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    opacity: 0;
 }
-.animation-delay-2000 {
-    animation-delay: 2s;
-}
+
+.delay-100 { animation-delay: 100ms; }
+.delay-200 { animation-delay: 200ms; }
+.delay-300 { animation-delay: 300ms; }
 
 /* Custom Scrollbar for nicer feel */
 ::-webkit-scrollbar {
