@@ -33,6 +33,9 @@ const SubscriptionImportModal = defineAsyncComponent(() => import('../../modals/
 const LogModal = defineAsyncComponent(() => import('../../modals/LogModal.vue'));
 const NodePreviewModal = defineAsyncComponent(() => import('../../modals/NodePreview/NodePreviewModal.vue'));
 
+const BatchGroupModal = defineAsyncComponent(() => import('../../modals/BatchGroupModal.vue'));
+const QRCodeModal = defineAsyncComponent(() => import('../../modals/QRCodeModal.vue'));
+
 // --- 基礎 Props 和狀態 ---
 const props = defineProps({ data: Object });
 const { showToast } = useToastStore();
@@ -59,6 +62,35 @@ const markDirty = () => {
 const isSortingSubs = ref(false);
 const isSortingNodes = ref(false);
 const manualNodeViewMode = ref('card');
+const showQRCodeModal = ref(false);
+const qrCodeUrl = ref('');
+const qrCodeTitle = ref('');
+
+const handleQRCode = (id, type = 'subscription') => {
+  if (type === 'subscription') {
+    const sub = subscriptions.value.find(s => s.id === id);
+    if (sub) {
+      qrCodeUrl.value = sub.url;
+      qrCodeTitle.value = sub.name || '订阅二维码';
+      showQRCodeModal.value = true;
+    }
+  } else if (type === 'profile') {
+    const profile = profiles.value.find(p => p.id === id);
+    if (profile) {
+      if (!settings.value.profileToken) {
+          showToast("未配置订阅组 Token，无法生成链接", "error");
+          return;
+      }
+      const token = settings.value.profileToken;
+      const baseUrl = window.location.origin;
+      // Using similar logic to useProfiles copy link
+      const idToUse = profile.customId || profile.id;
+      qrCodeUrl.value = `${baseUrl}/sub/${token}/${idToUse}`; 
+      qrCodeTitle.value = profile.name || '订阅组二维码';
+      showQRCodeModal.value = true;
+    }
+  }
+};
 
 const {
   subscriptions, subsCurrentPage, subsTotalPages, paginatedSubscriptions, totalRemainingTraffic,
@@ -120,6 +152,8 @@ const showBatchDeleteModal = ref(false);
 const batchDeleteIds = ref([]);
 const showDedupModal = ref(false);
 const dedupPlan = ref(null);
+const showBatchGroupModal = ref(false); // Added
+const batchGroupIds = ref([]); // Added
 
 // 节点预览相关状态
 const showNodePreviewModal = ref(false);
@@ -261,6 +295,16 @@ const confirmBatchDelete = () => {
   showBatchDeleteModal.value = false;
 };
 
+const handleOpenBatchGroupModal = (ids) => {
+  batchGroupIds.value = ids;
+  showBatchGroupModal.value = true;
+};
+
+const handleBatchGroupConfirm = (groupName) => {
+  batchUpdateGroup(batchGroupIds.value, groupName);
+  batchGroupIds.value = [];
+};
+
 // 节点预览处理函数
 const handlePreviewSubscription = (subscriptionId) => {
   const subscription = subscriptions.value.find(s => s.id === subscriptionId);
@@ -298,7 +342,7 @@ const handleProfileReorder = (fromIndex, toIndex) => {
 const formattedTotalRemainingTraffic = computed(() => formatBytes(totalRemainingTraffic.value));
 
 import DashboardHeader from './DashboardHeader.vue';
-import DashboardBanner from './DashboardBanner.vue';
+import SavePrompt from '../../ui/SavePrompt.vue';
 </script>
 
 <template>
@@ -314,11 +358,11 @@ import DashboardBanner from './DashboardBanner.vue';
       @open-bulk-import="showBulkImportModal = true"
     />
 
-    <DashboardBanner
-      :is-dirty="isDirty"
-      :save-state="saveState"
-      @save="handleSave"
-      @discard="handleDiscard"
+    <SavePrompt 
+      :is-dirty="isDirty" 
+      :save-state="saveState" 
+      @save="handleSave" 
+      @discard="handleDiscard" 
     />
 
     <!-- Main Grid -->
@@ -331,7 +375,8 @@ import DashboardBanner from './DashboardBanner.vue';
           @update-node-count="handleUpdateNodeCount" @refresh-all="batchUpdateAllSubscriptions"
           @edit="(id) => handleEditSubscription(subscriptions.find(s => s.id === id))"
           @toggle-sort="isSortingSubs = !isSortingSubs" @mark-dirty="markDirty" @delete-all="showDeleteSubsModal = true"
-          @preview="handlePreviewSubscription" @reorder="reorderSubscriptions" />
+          @preview="handlePreviewSubscription" @reorder="reorderSubscriptions" 
+          @qrcode="(id) => handleQRCode(id, 'subscription')" />
 
         <!-- Manual Node Panel -->
         <ManualNodePanel :manual-nodes="manualNodes" :paginated-manual-nodes="paginatedManualNodes"
@@ -346,15 +391,17 @@ import DashboardBanner from './DashboardBanner.vue';
           @delete-all="showDeleteNodesModal = true" @reorder="reorderManualNodes" @set-group-filter="setGroupFilter"
           @batch-update-group="(ids, group) => batchUpdateGroup(ids, group)" 
           @batch-delete-nodes="handleBatchDeleteRequest" 
-          @rename-group="renameGroup" @delete-group="deleteGroup" />
+          @rename-group="renameGroup" @delete-group="deleteGroup"
+          @open-batch-group-modal="handleOpenBatchGroupModal" />
       </div>
 
       <!-- Right Column -->
       <div class="lg:col-span-1 md:col-span-2 space-y-8">
-        <RightPanel :config="config" :profiles="profiles" />
+        <RightPanel :config="config" :profiles="profiles" @qrcode="(url, title) => { qrCodeUrl = url; qrCodeTitle = title; showQRCodeModal = true; }" />
         <ProfilePanel :profiles="profiles" @add="handleAddProfile" @edit="handleEditProfile"
           @delete="handleDeleteProfile" @deleteAll="showDeleteProfilesModal = true" @toggle="handleProfileToggle"
-          @copyLink="copyProfileLink" @preview="handlePreviewProfile" @reorder="handleProfileReorder" />
+          @copyLink="copyProfileLink" @preview="handlePreviewProfile" @reorder="handleProfileReorder" 
+          @qrcode="(id) => handleQRCode(id, 'profile')" />
       </div>
     </div>
   </div>
@@ -393,6 +440,8 @@ import DashboardBanner from './DashboardBanner.vue';
     @confirm="handleSaveNode" @input-url="handleNodeUrlInput" />
   <ManualNodeDedupModal v-model:show="showDedupModal" :plan="dedupPlan"
     @confirm="applyDedupPlan(dedupPlan); showDedupModal = false; dedupPlan = null" />
+  
+  <BatchGroupModal v-model:show="showBatchGroupModal" :groups="manualNodeGroups" @confirm="handleBatchGroupConfirm" />
 
   <SubscriptionEditModal v-model:show="showSubModal" :is-new="isNewSubscription"
     :editing-subscription="editingSubscription" @confirm="handleSaveSubscription" />
@@ -406,6 +455,12 @@ import DashboardBanner from './DashboardBanner.vue';
   <NodePreviewModal :show="showNodePreviewModal" :subscription-id="previewSubscriptionId"
     :subscription-name="previewSubscriptionName" :subscription-url="previewSubscriptionUrl"
     :profile-id="previewProfileId" :profile-name="previewProfileName" @update:show="showNodePreviewModal = $event" />
+
+  <QRCodeModal 
+    v-model:show="showQRCodeModal" 
+    :url="qrCodeUrl" 
+    :title="qrCodeTitle" 
+  />
 </template>
 
 <style scoped>
