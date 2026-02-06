@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 全局错误处理工具类
  * @author MiSub Team
  */
@@ -36,7 +36,7 @@ class ErrorHandler {
   constructor() {
     this.errorCounts = new Map();
     this.lastErrors = new Map();
-    this.errorResetTime = 60000; // 1分钟
+    this.errorResetTime = 60000; // 1 分钟
   }
 
   /**
@@ -82,7 +82,7 @@ class ErrorHandler {
       this.showUserNotification(errorInfo);
     }
 
-    // 在生产环境中可以发送到错误监控服务
+    // 在生产环境中发送到错误监控服务
     if (!import.meta.env.DEV && this.shouldSendToMonitoring(errorInfo)) {
       this.sendToMonitoringService(errorInfo);
     }
@@ -132,7 +132,7 @@ class ErrorHandler {
   shouldShowUserNotification(errorKey) {
     const count = this.errorCounts.get(errorKey) || 0;
 
-    // 第一次错误或错误次数是5的倍数时显示
+    // 第一次错误或错误次数是 5 的倍数时显示
     return count === 1 || count % 5 === 0;
   }
 
@@ -142,7 +142,7 @@ class ErrorHandler {
    * @returns {boolean} 是否发送
    */
   shouldSendToMonitoring(errorInfo) {
-    // 只发送关键错误或高频错误
+    // 仅发送关键错误或高频错误
     return errorInfo.count >= 3 ||
       errorInfo.context?.includes('critical') ||
       errorInfo.message?.includes('network');
@@ -153,13 +153,11 @@ class ErrorHandler {
    * @param {Object} errorInfo - 错误信息
    */
   showUserNotification(errorInfo) {
-    // 只有在浏览器环境中且存在toast函数时才显示
     const handler = toastHandler || (typeof window !== 'undefined' ? window.showToast : null);
     if (!handler) return;
 
     let message = this.getUserFriendlyMessage(errorInfo);
 
-    // 如果是重复错误，添加重复次数信息
     if (errorInfo.count > 1) {
       message += ` (已发生${errorInfo.count}次)`;
     }
@@ -175,29 +173,40 @@ class ErrorHandler {
   getUserFriendlyMessage(errorInfo) {
     const { message, context } = errorInfo;
 
-    // 根据错误类型返回不同的用户提示
     if (message.includes('timeout')) {
       return '请求超时，请稍后重试';
-    } else if (message.includes('Resource load failed')) {
+    }
+    if (message.includes('Resource load failed')) {
       const failedSrc = errorInfo.additionalData?.src || '';
       const fileName = failedSrc.split('/').pop() || 'unknown';
       if (typeof navigator !== 'undefined' && /firefox/i.test(navigator.userAgent)) {
         return `资源加载失败 (${fileName})。可能是浏览器隐私设置或扩展拦截了部分资源。`;
       }
       return `资源加载失败 (${fileName})，请尝试刷新页面`;
-    } else if (message.includes('network') || message.includes('fetch')) {
-      return '网络连接失败，请检查网络';
-    } else if (message.includes('Unauthorized') || message.includes('401')) {
-      return '认证失败，请重新登录';
-    } else if (message.includes('storage') || message.includes('保存失败')) {
-      return '数据保存失败，请稍后重试';
-    } else if (context?.includes('subscription')) {
-      return '订阅更新失败，请稍后重试';
-    } else if (context?.includes('batch')) {
-      return '批量操作失败，已降级到逐个处理';
-    } else {
-      return '操作失败，请稍后重试';
     }
+    if (message.includes('network') || message.includes('fetch')) {
+      return '网络连接失败，请检查网络';
+    }
+    if (message.includes('Unauthorized') || message.includes('401')) {
+      return '认证失败，请重新登录';
+    }
+    if (message.includes('MISUB_KV') || message.includes('KV 绑定')) {
+      return '服务端存储未初始化，请联系管理员配置 KV 绑定';
+    }
+    if (message.includes('MISUB_DB') || message.includes('D1 绑定')) {
+      return '服务端数据库未初始化，请联系管理员配置 D1 绑定';
+    }
+    if (message.includes('storage') || message.includes('保存失败')) {
+      return '数据保存失败，请稍后重试';
+    }
+    if (context?.includes('subscription')) {
+      return '订阅更新失败，请稍后重试';
+    }
+    if (context?.includes('batch')) {
+      return '批量操作失败，已降级为逐个处理';
+    }
+
+    return '操作失败，请稍后重试';
   }
 
   /**
@@ -230,7 +239,7 @@ class ErrorHandler {
         keepalive: true
       });
     } catch (e) {
-      // 监控服务本身失败，避免无限递归
+      // 监控服务失败，避免无限递归
       console.warn('[Error Monitoring Failed]', e);
     }
   }
@@ -256,13 +265,10 @@ class ErrorHandler {
   }
 }
 
-// 创建全局单例实例
 const globalErrorHandler = new ErrorHandler();
 
-// 导出工具类和实例
 export { ErrorHandler, globalErrorHandler };
 
-// 导出便捷函数
 export const handleError = (error, context, data) => {
   return globalErrorHandler.handleError(error, context, data);
 };
@@ -271,7 +277,6 @@ export const getErrorStats = () => {
   return globalErrorHandler.getErrorStats();
 };
 
-// 挂载到window对象以便全局访问
 if (typeof window !== 'undefined') {
   window.errorHandler = globalErrorHandler;
 }
