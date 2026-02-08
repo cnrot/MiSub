@@ -2041,11 +2041,8 @@ async function handleCallbackQuery(callbackQuery, env, request) {
 
             default:
                 // 处理动态回调
+                // 处理动态回调
                 if (data.startsWith('node_action_')) {
-                    // 节点操作面板
-                    const idx = parseInt(data.replace('node_action_', ''));
-                    const storageAdapter = await getStorageAdapter(env);
-                } else if (data.startsWith('node_action_')) {
                     // 节点/订阅 详情展示
                     // 格式: node_action_node_{idx} 或 node_action_sub_{idx}
                     // 兼容旧格式: node_action_{idx} (默认为node)
@@ -2066,11 +2063,16 @@ async function handleCallbackQuery(callbackQuery, env, request) {
                     const storageAdapter = await getStorageAdapter(env);
 
                     // 获取对应列表
+                    // 获取对应列表
+                    let fullList = await getUserNodes(userId, env);
                     let targetList = [];
+
                     if (type === 'sub') {
-                        targetList = await storageAdapter.get(KV_KEY_SUBS) || [];
+                        // Must match handleListCommand's filtering logic for 'sub'
+                        targetList = fullList.filter(n => /^https?:\/\//i.test(n.url || ''));
                     } else {
-                        targetList = await getUserNodes(userId, env);
+                        // Must match handleListCommand's filtering logic for 'node'
+                        targetList = fullList.filter(n => !/^https?:\/\//i.test(n.url || ''));
                     }
 
                     const profiles = await storageAdapter.get(KV_KEY_PROFILES) || [];
@@ -2089,7 +2091,14 @@ async function handleCallbackQuery(callbackQuery, env, request) {
 
                     // Note: Manual nodes use 'id', subscriptions might not have 'id' in the same way or logic might differ.
                     // Subscriptions usually have 'id' too.
-                    const isInProfile = boundProfile?.manualNodes?.includes(node.id);
+                    let isInProfile = false;
+                    if (boundProfile) {
+                        if (type === 'sub') {
+                            isInProfile = (boundProfile.subscriptions || []).includes(node.id);
+                        } else {
+                            isInProfile = (boundProfile.manualNodes || []).includes(node.id);
+                        }
+                    }
 
                     const protocol = (node.url || '').split('://')[0].toUpperCase();
                     const typeLabel = type === 'sub' ? '订阅' : '节点';
@@ -2099,8 +2108,7 @@ async function handleCallbackQuery(callbackQuery, env, request) {
                     message += `协议: ${protocol}\n`;
                     message += `状态: ${node.enabled ? '✅ 启用' : '⛔ 禁用'}\n`;
 
-                    // Only manual nodes are typically linked to profiles in this system context
-                    if (type === 'node' && boundProfile) {
+                    if (boundProfile) {
                         message += `订阅组: ${isInProfile ? '🔗 已关联' : '未关联'}\n`;
                     }
 
@@ -2116,11 +2124,13 @@ async function handleCallbackQuery(callbackQuery, env, request) {
                         { text: '📋 复制', callback_data: copyCmd }
                     ]);
 
-                    // 如果有绑定的订阅组，添加关联/取消关联按钮 (仅限节点)
-                    if (type === 'node' && boundProfile) {
+                    // 如果有绑定的订阅组，添加关联/取消关联按钮
+                    if (boundProfile) {
+                        const linkCmd = type === 'sub' ? `link_sub_${idx}` : `link_node_${idx}`;
+                        const unlinkCmd = type === 'sub' ? `unlink_sub_${idx}` : `unlink_node_${idx}`;
                         buttons.push([{
                             text: isInProfile ? '➖ 从订阅组移除' : '➕ 添加到订阅组',
-                            callback_data: isInProfile ? `unlink_node_${idx}` : `link_node_${idx}`
+                            callback_data: isInProfile ? unlinkCmd : linkCmd
                         }]);
                     }
 
@@ -2146,7 +2156,11 @@ async function handleCallbackQuery(callbackQuery, env, request) {
                     // 添加节点到订阅组
                     const idx = parseInt(data.replace('link_node_', ''));
                     const storageAdapter = await getStorageAdapter(env);
-                    const userNodes = await getUserNodes(userId, env);
+
+                    // MUST Use filtered list to match index
+                    const allNodes = await getUserNodes(userId, env);
+                    const userNodes = allNodes.filter(n => !/^https?:\/\//i.test(n.url || ''));
+
                     const profiles = await storageAdapter.get(KV_KEY_PROFILES) || [];
                     const settings = await storageAdapter.get(KV_KEY_SETTINGS) || {};
                     const config = settings.telegram_push_config || {};
@@ -2173,7 +2187,11 @@ async function handleCallbackQuery(callbackQuery, env, request) {
                     // 从订阅组移除节点
                     const idx = parseInt(data.replace('unlink_node_', ''));
                     const storageAdapter = await getStorageAdapter(env);
-                    const userNodes = await getUserNodes(userId, env);
+
+                    // MUST Use filtered list to match index
+                    const allNodes = await getUserNodes(userId, env);
+                    const userNodes = allNodes.filter(n => !/^https?:\/\//i.test(n.url || ''));
+
                     const profiles = await storageAdapter.get(KV_KEY_PROFILES) || [];
                     const settings = await storageAdapter.get(KV_KEY_SETTINGS) || {};
                     const config = settings.telegram_push_config || {};
@@ -2192,10 +2210,69 @@ async function handleCallbackQuery(callbackQuery, env, request) {
                         await answerCallbackQuery(callbackQuery.id, '操作失败', env, true);
                     }
 
+                } else if (data.startsWith('link_sub_')) {
+                    // 添加订阅到订阅组
+                    const idx = parseInt(data.replace('link_sub_', ''));
+                    const storageAdapter = await getStorageAdapter(env);
+
+                    // MUST Use filtered list
+                    const allNodes = await getUserNodes(userId, env);
+                    const subs = allNodes.filter(n => /^https?:\/\//i.test(n.url || ''));
+
+                    const profiles = await storageAdapter.get(KV_KEY_PROFILES) || [];
+                    const settings = await storageAdapter.get(KV_KEY_SETTINGS) || {};
+                    const config = settings.telegram_push_config || {};
+
+                    if (idx >= 0 && idx < subs.length && config.default_profile_id) {
+                        const sub = subs[idx];
+                        const profile = profiles.find(p => p.id === config.default_profile_id);
+                        if (profile) {
+                            profile.subscriptions = profile.subscriptions || [];
+                            if (!profile.subscriptions.includes(sub.id)) {
+                                profile.subscriptions.push(sub.id);
+                                await storageAdapter.put(KV_KEY_PROFILES, profiles);
+                            }
+                            await answerCallbackQuery(callbackQuery.id, `已添加到 ${profile.name}`, env);
+                            await editTelegramMessage(chatId, messageId,
+                                `✅ 订阅 #${idx + 1} 已添加到 <b>${profile.name}</b>`, env);
+                        }
+                    } else {
+                        await answerCallbackQuery(callbackQuery.id, '操作失败', env, true);
+                    }
+
+                } else if (data.startsWith('unlink_sub_')) {
+                    // 从订阅组移除订阅
+                    const idx = parseInt(data.replace('unlink_sub_', ''));
+                    const storageAdapter = await getStorageAdapter(env);
+
+                    // MUST Use filtered list
+                    const allNodes = await getUserNodes(userId, env);
+                    const subs = allNodes.filter(n => /^https?:\/\//i.test(n.url || ''));
+
+                    const profiles = await storageAdapter.get(KV_KEY_PROFILES) || [];
+                    const settings = await storageAdapter.get(KV_KEY_SETTINGS) || {};
+                    const config = settings.telegram_push_config || {};
+
+                    if (idx >= 0 && idx < subs.length && config.default_profile_id) {
+                        const sub = subs[idx];
+                        const profile = profiles.find(p => p.id === config.default_profile_id);
+                        if (profile && profile.subscriptions) {
+                            profile.subscriptions = profile.subscriptions.filter(id => id !== sub.id);
+                            await storageAdapter.put(KV_KEY_PROFILES, profiles);
+                            await answerCallbackQuery(callbackQuery.id, `已从 ${profile.name} 移除`, env);
+                            await editTelegramMessage(chatId, messageId,
+                                `✅ 订阅 #${idx + 1} 已从 <b>${profile.name}</b> 移除`, env);
+                        }
+                    } else {
+                        await answerCallbackQuery(callbackQuery.id, '操作失败', env, true);
+                    }
+
                 } else if (data.startsWith('copy_sub_')) {
                     const idx = parseInt(data.replace('copy_sub_', ''));
-                    const storageAdapter = await getStorageAdapter(env);
-                    const subs = await storageAdapter.get(KV_KEY_SUBS) || [];
+                    // MUST Use filtered list
+                    const allNodes = await getUserNodes(userId, env);
+                    const subs = allNodes.filter(n => /^https?:\/\//i.test(n.url || ''));
+
                     if (idx >= 0 && idx < subs.length) {
                         const subUrl = subs[idx].url;
                         await answerCallbackQuery(callbackQuery.id, '已发送', env);
@@ -2214,36 +2291,53 @@ async function handleCallbackQuery(callbackQuery, env, request) {
                     const idx = parseInt(data.replace(isSub ? 'toggle_sub_' : 'toggle_node_', ''));
                     const storageAdapter = await getStorageAdapter(env);
 
+                    let fullList = await getUserNodes(userId, env);
                     let targetList = [];
                     if (isSub) {
-                        targetList = await storageAdapter.get(KV_KEY_SUBS) || [];
+                        targetList = fullList.filter(n => /^https?:\/\//i.test(n.url || ''));
                     } else {
-                        targetList = await getUserNodes(userId, env);
+                        targetList = fullList.filter(n => !/^https?:\/\//i.test(n.url || ''));
                     }
 
                     if (idx >= 0 && idx < targetList.length) {
-                        const isEnabled = targetList[idx].enabled;
-                        // Toggle logic needs to know which list update.
-                        // For nodes, we use handleDisableCommand/handleEnableCommand which expects index in userNodes.
-                        // For subs, we need equivalent logic.
+                        const targetItem = targetList[idx];
+                        const isEnabled = targetItem.enabled;
 
                         await answerCallbackQuery(callbackQuery.id, isEnabled ? '已禁用' : '已启用', env);
 
                         if (isSub) {
-                            // Manual update for subscriptions
-                            targetList[idx].enabled = !isEnabled;
-                            await storageAdapter.put(KV_KEY_SUBS, targetList);
-                            // Refresh logic? Send command to update list view?
-                            // Updating the message (editTelegramMessage) is ideal but we need to reconstruct it.
-                            // For now, let's just trigger the list view refresh if possible, or simple confirmation.
-                            // Better: call handleListCommand again.
-                            await handleListCommand(chatId, userId, env, 0, 'sub');
+                            // Find original index in KV_KEY_SUBS to update
+                            // Since targetList is filtered, we need to find the item in the original storage
+                            const originalSubs = await storageAdapter.get(KV_KEY_SUBS) || [];
+                            // Match by ID if possible, or some unique property. 
+                            // Subscription objects usually have IDs.
+                            const subToUpdate = originalSubs.find(s => s.id === targetItem.id);
+
+                            if (subToUpdate) {
+                                subToUpdate.enabled = !isEnabled;
+                                await storageAdapter.put(KV_KEY_SUBS, originalSubs);
+                                await handleListCommand(chatId, userId, env, 0, 'sub');
+                            }
                         } else {
-                            // Valid for manual nodes
-                            if (isEnabled) {
-                                await handleDisableCommand(chatId, userId, [(idx + 1).toString()], env);
-                            } else {
-                                await handleEnableCommand(chatId, userId, [(idx + 1).toString()], env);
+                            // Valid for manual nodes - use command which likely handles ID or index?
+                            // handleDisableCommand takes index. Is it filtered index?
+                            // Let's check handleDisableCommand.
+                            // If handleDisableCommand expects ALL nodes index, we have a problem.
+                            // But typically commands work on displayed lists?
+                            // If user types /disable 1, what does it disable? 
+                            // If it disables filtered list item, we are good.
+                            // If it disables global list item, we are misaligned.
+
+                            // If handleDisableCommand uses `getUserNodes` without filtering, we need to map `idx` back to `allNodes` index.
+                            const allNodes = await getUserNodes(userId, env);
+                            const realIdx = allNodes.findIndex(n => n.id === targetItem.id);
+
+                            if (realIdx !== -1) {
+                                if (isEnabled) {
+                                    await handleDisableCommand(chatId, userId, [(realIdx + 1).toString()], env);
+                                } else {
+                                    await handleEnableCommand(chatId, userId, [(realIdx + 1).toString()], env);
+                                }
                             }
                         }
                     } else {
@@ -2292,24 +2386,45 @@ async function handleCallbackQuery(callbackQuery, env, request) {
                     }
                     const idx = parseInt(idxStr);
 
+                    // Need to map filtered index to real storage index/ID
+                    const allNodes = await getUserNodes(userId, env);
+                    let targetItem = null;
+
                     if (type === 'sub') {
-                        // Delete Subscription
-                        const storageAdapter = await getStorageAdapter(env);
-                        const subs = await storageAdapter.get(KV_KEY_SUBS) || [];
-                        if (idx >= 0 && idx < subs.length) {
-                            const deletedName = subs[idx].name;
-                            subs.splice(idx, 1);
-                            await storageAdapter.put(KV_KEY_SUBS, subs);
-                            await answerCallbackQuery(callbackQuery.id, '已删除', env);
-                            await sendTelegramMessage(chatId, `🗑️ 已删除订阅: <b>${escapeHtml(deletedName)}</b>`, env);
-                            await handleListCommand(chatId, userId, env, 0, 'sub');
+                        const subs = allNodes.filter(n => /^https?:\/\//i.test(n.url || ''));
+                        if (idx >= 0 && idx < subs.length) targetItem = subs[idx];
+                    } else {
+                        const nodes = allNodes.filter(n => !/^https?:\/\//i.test(n.url || ''));
+                        if (idx >= 0 && idx < nodes.length) targetItem = nodes[idx];
+                    }
+
+                    if (targetItem) {
+                        if (type === 'sub') {
+                            // Create separate handleDeleteSub logic or direct DB manipulation safely
+                            const storageAdapter = await getStorageAdapter(env);
+                            const originalSubs = await storageAdapter.get(KV_KEY_SUBS) || [];
+                            const realIdx = originalSubs.findIndex(s => s.id === targetItem.id);
+
+                            if (realIdx !== -1) {
+                                const deletedName = originalSubs[realIdx].name;
+                                originalSubs.splice(realIdx, 1);
+                                await storageAdapter.put(KV_KEY_SUBS, originalSubs);
+                                await answerCallbackQuery(callbackQuery.id, '已删除', env);
+                                await sendTelegramMessage(chatId, `🗑️ 已删除订阅: <b>${escapeHtml(deletedName)}</b>`, env);
+                                await handleListCommand(chatId, userId, env, 0, 'sub');
+                            } else {
+                                await answerCallbackQuery(callbackQuery.id, '对象不存在或已删除', env, true);
+                            }
                         } else {
-                            await answerCallbackQuery(callbackQuery.id, '对象不存在', env, true);
+                            // For nodes, find real index in ALL nodes for command
+                            const realIdx = allNodes.findIndex(n => n.id === targetItem.id);
+                            if (realIdx !== -1) {
+                                await answerCallbackQuery(callbackQuery.id, '正在删除...', env);
+                                await handleDeleteCommand(chatId, userId, [(realIdx + 1).toString()], env);
+                            }
                         }
                     } else {
-                        // Delete Node
-                        await answerCallbackQuery(callbackQuery.id, '正在删除...', env);
-                        await handleDeleteCommand(chatId, userId, [(idx + 1).toString()], env);
+                        await answerCallbackQuery(callbackQuery.id, '对象不存在', env, true);
                     }
 
                 } else if (data.startsWith('prompt_rename_')) {
