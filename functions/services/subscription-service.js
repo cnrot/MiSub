@@ -5,7 +5,7 @@
 
 import { parseNodeList } from '../modules/utils/node-parser.js';
 import { getProcessedUserAgent } from '../utils/format-utils.js';
-import { prependNodeName, removeFlagEmoji, fixNodeUrlEncoding } from '../utils/node-utils.js';
+import { prependNodeName, removeFlagEmoji, fixNodeUrlEncoding, sanitizeNodeForYaml } from '../utils/node-utils.js';
 import { applyNodeTransformPipeline } from '../utils/node-transformer.js';
 import { createTimeoutFetch } from '../modules/utils.js';
 
@@ -155,26 +155,44 @@ export async function generateCombinedNodeList(context, config, userAgent, misub
     // 用户可以在模板中使用 {name} 变量来保留原始信息
     const skipPrefixDueToRenaming = nodeTransformConfig?.enabled && nodeTransformConfig?.rename?.template?.enabled;
 
-    const processedManualNodes = misubs.filter(sub => !sub.url.toLowerCase().startsWith('http')).map(node => {
-        if (node.isExpiredNode) {
-            return node.url; // Directly use the URL for expired node
-        } else {
-            // 修复手动SS节点中的URL编码问题（以及 Hysteria2 等其他协议）
-            let processedUrl = fixNodeUrlEncoding(node.url);
+    const processedManualNodes = misubs
+        .filter(sub => {
+            const url = typeof sub?.url === 'string' ? sub.url.trim() : '';
+            return Boolean(url) && !url.toLowerCase().startsWith('http');
+        })
+        .map(node => {
+            try {
+                const rawUrl = typeof node?.url === 'string' ? node.url.trim() : '';
+                if (!rawUrl) return '';
 
-            // 如果用户设置了手动节点名称，则替换链接中的原始名称
-            const customNodeName = typeof node.name === 'string' ? node.name.trim() : '';
-            if (customNodeName) {
-                processedUrl = applyManualNodeName(processedUrl, customNodeName);
+                if (node.isExpiredNode) {
+                    return rawUrl; // Directly use the URL for expired node
+                }
+
+                // 修复手动SS节点中的URL编码问题（以及 Hysteria2 等其他协议）
+                let processedUrl = fixNodeUrlEncoding(rawUrl);
+                if (typeof processedUrl !== 'string' || !processedUrl) {
+                    processedUrl = rawUrl;
+                }
+
+                // 如果用户设置了手动节点名称，则替换链接中的原始名称
+                const customNodeName = typeof node.name === 'string' ? node.name.trim() : '';
+                if (customNodeName) {
+                    processedUrl = applyManualNodeName(processedUrl, customNodeName);
+                }
+
+                // 只有在智能重命名未启用时才添加前缀
+                const shouldAddPrefix = shouldPrependManualNodes && !skipPrefixDueToRenaming;
+                return shouldAddPrefix ? prependNodeName(processedUrl, manualNodePrefix) : processedUrl;
+            } catch (error) {
+                console.warn('[Subscription] 手动节点处理失败，已跳过:', error?.message || error);
+                return '';
             }
+        })
+        .filter(Boolean)
+        .join('\n');
 
-            // 只有在智能重命名未启用时才添加前缀
-            const shouldAddPrefix = shouldPrependManualNodes && !skipPrefixDueToRenaming;
-            return shouldAddPrefix ? prependNodeName(processedUrl, manualNodePrefix) : processedUrl;
-        }
-    }).join('\n');
-
-    const httpSubs = misubs.filter(sub => sub.url.toLowerCase().startsWith('http'));
+    const httpSubs = misubs.filter(sub => sub && sub.url && sub.url.toLowerCase().startsWith('http'));
     const limiter = createConcurrencyLimiter(FETCH_CONFIG.CONCURRENCY);
 
     /**
@@ -254,9 +272,12 @@ export async function generateCombinedNodeList(context, config, userAgent, misub
         ? combinedLines
         : combinedLines.map(line => removeFlagEmoji(line));
 
+    // [Sanitize] Always sanitize node names for YAML compatibility (Subconverter issue with unquoted special chars)
+    const sanitizedLines = normalizedLines.map(line => sanitizeNodeForYaml(line));
+
     const outputLines = nodeTransformConfig?.enabled
-        ? applyNodeTransformPipeline(normalizedLines, { ...nodeTransformConfig, enableEmoji: templateContainsEmoji })
-        : [...new Set(normalizedLines)];
+        ? applyNodeTransformPipeline(sanitizedLines, { ...nodeTransformConfig, enableEmoji: templateContainsEmoji })
+        : [...new Set(sanitizedLines)];
     const uniqueNodesString = outputLines.join('\n');
 
     // 确保最终的字符串在非空时以换行符结束，以兼容 subconverter
@@ -302,7 +323,10 @@ export async function generateCombinedNodeList(context, config, userAgent, misub
                 geoInfo = context.logMetadata.geoInfo || geoInfo;
             } else if (context && context.request) {
                 const cf = context.request.cf;
-                clientIp = context.request.headers.get('CF-Connecting-IP') || 'Unknown';
+                clientIp = context.request.headers.get('CF-Connecting-IP')
+                    || context.request.headers.get('X-Real-IP')
+                    || context.request.headers.get('X-Forwarded-For')?.split(',')[0]?.trim()
+                    || 'Unknown';
                 if (cf) {
                     geoInfo = {
                         country: cf.country,

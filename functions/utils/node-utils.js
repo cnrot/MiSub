@@ -19,7 +19,16 @@ export function prependNodeName(link, prefix) {
 
     const appendToFragment = (baseLink, namePrefix) => {
         const hashIndex = baseLink.lastIndexOf('#');
-        const originalName = hashIndex !== -1 ? decodeURIComponent(baseLink.substring(hashIndex + 1)) : '';
+        let originalName = '';
+        if (hashIndex !== -1) {
+            const rawName = baseLink.substring(hashIndex + 1);
+            try {
+                originalName = decodeURIComponent(rawName);
+            } catch (e) {
+                // 避免非法百分号编码导致 Worker 1101，回退使用原始片段
+                originalName = rawName;
+            }
+        }
         const base = hashIndex !== -1 ? baseLink.substring(0, hashIndex) : baseLink;
         if (originalName.startsWith(namePrefix)) {
             return baseLink;
@@ -177,6 +186,10 @@ export function removeFlagEmoji(link) {
  * [核心修复] 修复节点URL中的编码问题（包含 Hysteria2 密码解码）
  */
 export function fixNodeUrlEncoding(nodeUrl) {
+    if (typeof nodeUrl !== 'string' || nodeUrl.length === 0) {
+        return nodeUrl;
+    }
+
     // 1. 针对 Hysteria2/Hy2 的用户名与参数进行解码
     if (nodeUrl.startsWith('hysteria2://') || nodeUrl.startsWith('hy2://')) {
         const safeDecode = (value) => {
@@ -226,8 +239,89 @@ export function fixNodeUrlEncoding(nodeUrl) {
                 baseLink = protocol + '://' + decodedBase64 + baseLink.substring(atIndex);
             }
         }
+
         return baseLink + fragment;
     } catch (e) {
         return nodeUrl;
+    }
+}
+
+/**
+ * 净化节点名称以兼容 YAML Flow Style
+ * 防止 Subconverter 生成的 YAML 包含非法起始字符（如 *）
+ * @param {string} nodeUrl 
+ * @returns {string} processedNodeUrl
+ */
+export function sanitizeNodeForYaml(nodeUrl) {
+    if (!nodeUrl) return nodeUrl;
+
+    // 针对不同协议提取和替换名称
+    const sanitizeName = (name) => {
+        if (!name) return name;
+        // YAML Flow Style Unquoted Scalars cannot start with:
+        // [, ], {, }, ,, :, -, ?, !, #, &, *, %, >, |, @
+        // We replace them with full-width equivalents or '★' for *
+        const unsafeStartRegex = /^([*&!\[\]\{\},:?#%|>@\-])/;
+        if (unsafeStartRegex.test(name)) {
+            return name.replace(/^[*]/, '★')
+                .replace(/^&/, '＆')
+                .replace(/^!/, '！')
+                .replace(/^\[/, '【')
+                .replace(/^\]/, '】')
+                .replace(/^\{/, '｛')
+                .replace(/^\}/, '｝')
+                .replace(/^,/, '，')
+                .replace(/^:/, '：')
+                .replace(/^-/, '－')
+                .replace(/^\?/, '？')
+                .replace(/^#/, '＃')
+                .replace(/^%/, '％')
+                .replace(/^\|/, '｜')
+                .replace(/^>/, '＞')
+                .replace(/^@/, '＠');
+        }
+        return name;
+    };
+
+    if (nodeUrl.startsWith('vmess://')) {
+        try {
+            let base64Part = nodeUrl.substring('vmess://'.length);
+            if (base64Part.includes('%')) {
+                base64Part = decodeURIComponent(base64Part);
+            }
+            base64Part = base64Part.replace(/\s+/g, '');
+            base64Part = base64Part.replace(/-/g, '+').replace(/_/g, '/');
+            while (base64Part.length % 4 !== 0) {
+                base64Part += '=';
+            }
+            const jsonString = new TextDecoder('utf-8').decode(Uint8Array.from(atob(base64Part), c => c.charCodeAt(0)));
+            const nodeConfig = JSON.parse(jsonString);
+
+            if (nodeConfig.ps) {
+                const newPs = sanitizeName(nodeConfig.ps);
+                if (newPs !== nodeConfig.ps) {
+                    nodeConfig.ps = newPs;
+                    const newJsonString = JSON.stringify(nodeConfig);
+                    const newBase64Part = btoa(unescape(encodeURIComponent(newJsonString)));
+                    return 'vmess://' + newBase64Part;
+                }
+            }
+            return nodeUrl;
+        } catch (e) {
+            return nodeUrl;
+        }
+    } else {
+        const hashIndex = nodeUrl.lastIndexOf('#');
+        if (hashIndex === -1) return nodeUrl;
+        try {
+            const originalName = decodeURIComponent(nodeUrl.substring(hashIndex + 1));
+            const newName = sanitizeName(originalName);
+            if (newName !== originalName) {
+                return nodeUrl.substring(0, hashIndex + 1) + encodeURIComponent(newName);
+            }
+            return nodeUrl;
+        } catch (e) {
+            return nodeUrl;
+        }
     }
 }
