@@ -41,20 +41,17 @@ function buildProxyLine(proxy) {
     }
     if (type === 'vmess') {
         const extras = [];
-        const sni = proxy.servername ?? proxy.sni;
-        const hasTlsLayer = proxy.tls || sni !== undefined;
         if (proxy.network === 'ws') {
-            extras.push(hasTlsLayer ? 'obfs=wss' : 'obfs=ws');
+            extras.push('obfs=ws');
             const wsOpts = proxy['ws-opts'] || proxy.wsOpts;
             if (wsOpts?.path) extras.push(`obfs-uri=${wsOpts.path}`);
             if (wsOpts?.headers?.Host) extras.push(`obfs-host=${wsOpts.headers.Host}`);
-            else if (sni !== undefined) extras.push(`obfs-host=${sni}`);
-        } else {
-            if (hasTlsLayer) extras.push('over-tls=true');
-            if (sni !== undefined) extras.push(`tls-host=${sni}`);
         }
+        const sni = proxy.servername ?? proxy.sni;
+        if (proxy.tls || sni !== undefined) extras.push('over-tls=true');
+        if (sni !== undefined) extras.push(`tls-host=${sni}`);
         if (proxy['skip-cert-verify'] === true || proxy.skipCertVerify === true) extras.push('tls-verification=false');
-        return `vmess=${server}:${port}, method=${normalizeQxVmessMethod(proxy.cipher)}, password=${proxy.uuid || ''}${extras.length ? `, ${extras.join(', ')}` : ''}, tag=${name}`;
+        return `vmess=${server}:${port}, method=${proxy.cipher || 'auto'}, password=${proxy.uuid || ''}, tag=${name}${extras.length ? `, ${extras.join(', ')}` : ''}`;
     }
     if (type === 'vless') {
         const extras = [];
@@ -79,9 +76,11 @@ function buildProxyLine(proxy) {
         return `http=${server}:${port}, username=${proxy.username || ''}, password=${proxy.password || ''}${extras.length ? `, ${extras.join(', ')}` : ''}, tag=${name}`;
     }
     if (type === 'hysteria2' || type === 'hy2') {
-        // Quantumult X rejects the Hysteria2 server syntax emitted by MiSub; omit it
-        // from rendered QuanX templates rather than breaking the entire import.
-        return null;
+        const extras = [];
+        const sni = proxy.servername ?? proxy.sni;
+        if (sni !== undefined) extras.push(`sni=${sni}`);
+        if (proxy['skip-cert-verify'] === true || proxy.skipCertVerify === true) extras.push('tls-verification=false');
+        return `hysteria2=${server}:${port}, password=${proxy.password || ''}${extras.length ? `, ${extras.join(', ')}` : ''}, tag=${name}`;
     }
     if (type === 'tuic') {
         const extras = [];
@@ -118,21 +117,20 @@ function buildPolicyLine(group) {
     const members = (['url-test', 'fallback', 'load-balance'].includes(type)
         ? rawMembers.filter(member => !['DIRECT', 'REJECT', 'REJECT-DROP', 'PASS'].includes(String(member).toUpperCase()))
         : rawMembers).join(', ');
-    const tolerance = group.options?.tolerance || 50;
-    const interval = group.options?.interval || 300;
-    
-    if (type === 'url-test' || type === 'url-latency-benchmark') {
-        return `url-latency-benchmark=${group.name}, ${members}, check-interval=${interval}, tolerance=${tolerance}`;
+    const filter = Array.isArray(group.filters) && group.filters.length > 0 ? group.filters.join('|') : '';
+    const tolerance = group.options?.tolerance;
+    if (type === 'url-test') {
+        const base = filter ? `${group.name} = url-test, ${members}, url=${group.options?.url || 'http://www.gstatic.com/generate_204'}, interval=${group.options?.interval || 300}, filter=${filter}` : `${group.name} = url-test, ${members}, url=${group.options?.url || 'http://www.gstatic.com/generate_204'}, interval=${group.options?.interval || 300}`;
+        return tolerance ? `${base}, tolerance=${tolerance}` : base;
     }
-    if (type === 'fallback' || type === 'available') {
-        return `available=${group.name}, ${members}`;
+    if (type === 'fallback') {
+        const base = filter ? `${group.name} = fallback, ${members}, url=${group.options?.url || 'http://www.gstatic.com/generate_204'}, interval=${group.options?.interval || 300}, filter=${filter}` : `${group.name} = fallback, ${members}, url=${group.options?.url || 'http://www.gstatic.com/generate_204'}, interval=${group.options?.interval || 300}`;
+        return tolerance ? `${base}, tolerance=${tolerance}` : base;
     }
     if (type === 'load-balance') {
-        // Quantumult X round-robin/load-balance isn't natively identical, but 'available' or 'static' is usually the fallback.
-        // Or we can just fallback to static
-        return `static=${group.name}, ${members}`;
+        return filter ? `${group.name} = load-balance, ${members}, url=${group.options?.url || 'http://www.gstatic.com/generate_204'}, interval=${group.options?.interval || 300}, filter=${filter}` : `${group.name} = load-balance, ${members}`;
     }
-    return `static=${group.name}, ${members}`;
+    return `${group.name} = select, ${members}`;
 }
 
 function buildRuleLine(rule) {
@@ -142,12 +140,6 @@ function buildRuleLine(rule) {
     if (type === 'MATCH' || type === 'FINAL') return `FINAL,${rule.policy}`;
     if (type === 'GEOIP') return `GEOIP,${rule.value || 'CN'},${rule.policy}`;
     return `${type},${rule.value},${rule.policy}`;
-}
-
-function normalizeQxVmessMethod(method) {
-    const normalized = String(method || '').trim().toLowerCase();
-    if (!normalized || normalized === 'auto') return 'none';
-    return normalized;
 }
 
 export function renderQuanxFromTemplateModel(model, options = {}) {

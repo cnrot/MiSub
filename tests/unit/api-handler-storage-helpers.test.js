@@ -181,12 +181,7 @@ describe('api-handler storage helper usage', () => {
     const response = await handleMisubsSave(request, { MISUB_DB: {} });
 
     expect(response.status).toBe(200);
-    expect(putSubscription).toHaveBeenCalledWith({
-      id: 'sub-new',
-      name: 'Sub New',
-      url: 'https://new.example.com',
-      sortIndex: 0,
-    });
+    expect(putSubscription).toHaveBeenCalledWith({ id: 'sub-new', name: 'Sub New', url: 'https://new.example.com' });
     expect(deleteSubscriptionById).toHaveBeenCalledWith('sub-legacy');
     expect(putProfile).toHaveBeenCalledWith({
       id: 'profile-new',
@@ -195,8 +190,7 @@ describe('api-handler storage helper usage', () => {
       manualNodes: [],
       enabled: true,
       isPublic: false,
-      downloadCount: 0,
-      sortIndex: 0,
+      downloadCount: 0
     });
     expect(deleteProfileById).toHaveBeenCalledWith('profile-legacy');
     expect(put).not.toHaveBeenCalledWith('misub_subscriptions_v1', expect.anything());

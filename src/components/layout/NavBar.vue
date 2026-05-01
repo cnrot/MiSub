@@ -16,7 +16,7 @@ const { publicConfig } = storeToRefs(sessionStore);
 const isPublicEnabled = computed(() => publicConfig.value?.enablePublicPage === true);
 const hideBranding = computed(() => publicConfig.value?.customPage?.enabled === true && publicConfig.value?.customPage?.hideBranding === true);
 
-defineProps({
+const props = defineProps({
   isLoggedIn: Boolean
 });
 
@@ -24,6 +24,7 @@ const emit = defineEmits(['logout']);
 
 const navItems = MAIN_NAV_ITEMS;
 
+// 路由激活判断：/ 精确匹配，其他路径前缀匹配（支持子路由）
 function isActive(path) {
   if (path === '/') return route.path === '/';
   if (path === '/dashboard') return route.path === '/dashboard';
@@ -32,9 +33,10 @@ function isActive(path) {
 </script>
 
 <template>
+  <!-- Mobile Top Header -->
   <header
     aria-label="顶部导航栏"
-    class="app-nav-bar md:hidden sticky top-0 z-50 flex items-center justify-between px-4 py-2.5 w-full bg-white/90 dark:bg-[#030712]/88 backdrop-blur-xl border-b border-gray-200/60 dark:border-white/10 shadow-sm transition-all duration-300"
+    class="md:hidden sticky top-0 z-50 flex items-center justify-between px-4 py-2.5 w-full bg-white/85 dark:bg-[#030712]/85 backdrop-blur-xl border-b border-gray-200/50 dark:border-white/5 shadow-sm transition-all duration-300"
   >
     <BrandLogo text-size-class="text-lg" :icon-size="32" />
 
@@ -49,35 +51,39 @@ function isActive(path) {
     />
   </header>
 
+  <!-- Desktop Header -->
   <header
     aria-label="主导航栏"
-    class="app-nav-bar hidden md:block sticky top-0 z-50 w-full bg-white/90 dark:bg-[#030712]/88 backdrop-blur-xl border-b border-gray-200/60 dark:border-white/10 transition-all duration-300"
+    class="hidden md:block sticky top-0 z-50 w-full bg-white/85 dark:bg-[#030712]/85 backdrop-blur-xl border-b border-gray-200/50 dark:border-white/5 transition-all duration-300"
   >
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 md:h-[76px] flex items-center justify-between">
-      <div class="shrink-0 pr-5">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 md:h-20 flex items-center justify-between">
+      <!-- Logo Area -->
+      <div class="shrink-0 pr-6 border-r border-gray-200 dark:border-white/10">
         <BrandLogo text-size-class="text-lg" :icon-size="32" />
       </div>
 
-      <nav aria-label="主导航" class="nav-tab-shell">
+      <!-- Navigation Links -->
+      <nav aria-label="主导航" class="flex items-center gap-1">
         <router-link
           v-for="item in navItems"
           :key="item.path"
           :to="item.path"
           class="nav-tab group"
-          :class="isActive(item.path) ? 'nav-tab-active' : 'nav-tab-inactive'"
+          :class="[
+            isActive(item.path)
+              ? 'nav-tab-active'
+              : 'nav-tab-inactive'
+          ]"
         >
+          <!-- Active Background Pill -->
           <div v-if="isActive(item.path)" class="nav-tab-active-pill"></div>
 
-          <BaseIcon
-            :path="item.iconPath"
-            className="relative z-10 h-4 w-4 shrink-0 transition-transform duration-300"
-            :class="isActive(item.path) ? 'scale-105' : 'opacity-75 group-hover:opacity-100'"
-          />
           <span class="relative z-10">{{ item.name }}</span>
         </router-link>
       </nav>
 
-      <div class="flex items-center pl-5 ml-3 gap-2">
+      <!-- Right Actions -->
+      <div class="flex items-center pl-4 ml-2 gap-2 border-l border-gray-200 dark:border-white/10">
         <NavActionGroup
           :is-logged-in="isLoggedIn"
           :show-explore="isPublicEnabled"
@@ -92,6 +98,7 @@ function isActive(path) {
     </div>
   </header>
 
+  <!-- Mobile Bottom Tab Bar（独立于 sticky wrapper 之外，避免 z-index 层叠上下文问题）-->
   <nav
     v-if="isLoggedIn"
     aria-label="底部主导航"
@@ -105,13 +112,13 @@ function isActive(path) {
         class="nav-mobile-item"
         :class="isActive(item.path) ? 'nav-mobile-item-active' : 'nav-mobile-item-inactive'"
       >
-        <span class="nav-mobile-icon-wrap">
+        <div class="relative">
           <BaseIcon
             :path="item.iconPath"
-            className="w-5 h-5 transition-transform duration-300"
+            className="w-6 h-6 transition-transform duration-300"
             :class="isActive(item.path) ? 'scale-110' : ''"
           />
-        </span>
+        </div>
 
         <span class="text-[10px] font-medium tracking-tight">{{ item.name }}</span>
       </router-link>

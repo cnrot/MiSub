@@ -1,6 +1,5 @@
 import { parseNodeList } from '../utils/node-parser.js';
 import { fetchWithRetry } from '../../services/fetch-utils.js';
-import { buildFetchProxyUrl } from '../../utils/fetch-proxy-utils.js';
 import {
     filterNodeObjects,
     buildRuleSet,
@@ -31,7 +30,7 @@ export async function fetchSubscriptionNodes(url, subscriptionName, userAgent, c
         // 当配置了 fetchProxy 时，使用代理拉取订阅
         let requestUrl = url;
         if (fetchProxy && typeof fetchProxy === 'string' && fetchProxy.trim()) {
-            requestUrl = buildFetchProxyUrl(fetchProxy, url, effectiveUserAgent);
+            requestUrl = fetchProxy.trim() + encodeURIComponent(url);
         }
 
         // 使用统一的 Fetch 工具，复用重试逻辑
