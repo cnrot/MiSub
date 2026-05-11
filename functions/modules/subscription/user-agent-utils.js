@@ -95,7 +95,7 @@ export function determineTargetFormat(userAgent, searchParams) {
         ['egern', 'egern'],
         ['sing-box', 'singbox'],
         ['singbox', 'singbox'],
-        ['hiddify', 'singbox'],
+        ['hiddify', 'clash'],
         ['shadowrocket', 'base64'],
         ['v2rayn', 'base64'],
         ['v2rayng', 'base64'],
