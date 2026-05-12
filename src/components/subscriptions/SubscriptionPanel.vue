@@ -41,12 +41,15 @@ const handleImport = () => emit('import');
 <template>
   <div>
     <div class="mb-4 rounded-xl border border-gray-100/80 bg-white/85 p-4 shadow-sm dark:border-white/10 dark:bg-gray-900/70">
-      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div class="flex items-center gap-3 shrink-0">
-          <h2 class="text-xl font-bold text-gray-900 dark:text-white">机场订阅</h2>
-          <span class="rounded-full bg-gray-100 px-2.5 py-0.5 text-sm font-semibold text-gray-700 dark:bg-white/10 dark:text-gray-200">{{ subscriptions.length }}</span>
+      <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div class="min-w-0">
+          <div class="flex items-center gap-3 shrink-0">
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white">机场订阅</h2>
+            <span class="rounded-full bg-gray-100 px-2.5 py-0.5 text-sm font-semibold text-gray-700 dark:bg-white/10 dark:text-gray-200">{{ subscriptions.length }}</span>
+          </div>
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">维护机场订阅源，添加/导入后可在卡片中查看节点、流量与到期信息。</p>
         </div>
-        <div class="flex items-center gap-2 sm:w-auto justify-end sm:justify-start">
+        <div class="flex flex-wrap items-center gap-2 sm:w-auto justify-end sm:justify-start">
           <slot name="actions-prepend"></slot>
           <button @click="handleImport" class="shrink-0 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-white/10 dark:bg-white/5 dark:text-gray-200 dark:hover:bg-white/10">批量导入</button>
           <button @click="handleAdd" class="shrink-0 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-700">新增</button>
@@ -117,10 +120,14 @@ const handleImport = () => emit('import');
     <div v-else class="rounded-xl border border-dashed border-gray-300 bg-white/60 py-6 dark:border-gray-700 dark:bg-gray-900/50">
       <EmptyState 
         title="没有机场订阅" 
-        description="从添加你的第一个订阅开始。" 
+        description="从单个机场订阅开始；如果手上有多条链接，也可以一次性批量导入。" 
         icon="folder" 
         :total-count="0" 
       />
+      <div class="-mt-8 mb-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
+        <button data-testid="empty-add-subscription" @click="handleAdd" class="inline-flex items-center justify-center rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500/30">添加机场订阅</button>
+        <button data-testid="empty-import-subscriptions" @click="handleImport" class="inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500/30 dark:border-white/10 dark:bg-white/5 dark:text-gray-300 dark:hover:bg-white/10">批量导入</button>
+      </div>
     </div>
   </div>
 </template>
