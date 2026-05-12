@@ -70,6 +70,9 @@ const isExternalEngine = computed(() => props.settings.subconverter.engineMode =
 watch(isExternalEngine, (enabled) => {
   if (!enabled) return;
 
+  props.settings.builtinSkipCertVerify = false;
+  props.settings.builtinEnableUdp = false;
+
   if (props.settings.transformConfigMode === 'builtin') {
     props.settings.transformConfigMode = 'preset';
   }
