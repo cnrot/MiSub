@@ -8,7 +8,27 @@ import { transformBuiltinSubscription } from '../modules/subscription/transforme
 import { renderClashFromIniTemplate, renderSingboxFromIniTemplate, renderSurgeFromIniTemplate, renderLoonFromIniTemplate, renderQuanxFromIniTemplate, renderEgernFromIniTemplate } from '../modules/subscription/template-pipeline.js';
 import { getBuiltinTemplate } from '../modules/subscription/builtin-template-registry.js';
 import { fetchTransformTemplate } from '../modules/subscription/transform-template-cache.js';
+import { resolveRuleTemplateSource } from '../modules/rule-template-handler.js';
 import { base64EncodeUtf8 } from '../modules/utils.js';
+
+function getTemplateExtension(templateUrl) {
+    const raw = typeof templateUrl === 'string' ? templateUrl.trim() : '';
+    if (!raw) return '';
+
+    try {
+        const parsed = new URL(raw);
+        return parsed.pathname.split('/').pop()?.split('.').pop()?.toLowerCase() || '';
+    } catch {
+        const cleanPath = raw.split('#')[0].split('?')[0];
+        return cleanPath.split('/').pop()?.split('.').pop()?.toLowerCase() || '';
+    }
+}
+
+export function isIniTemplateSource(templateSource, builtinTemplateEntry = null) {
+    if (builtinTemplateEntry?.format === 'ini') return true;
+    if (templateSource?.kind === 'custom') return true;
+    return getTemplateExtension(templateSource?.value) === 'ini';
+}
 
 export class ProcessorService {
     /**
@@ -52,12 +72,12 @@ export class ProcessorService {
             combinedNodeList,
             subName,
             config,
-            builtinOptions,
-            templateSource,
+            builtinOptions = {},
+            templateSource = { kind: 'none', value: '' },
             managedConfigUrl,
             storageAdapter,
             userInfoHeader
-        } = options;
+        } = options || {};
 
         // Check for Base64 (simplest case)
         if (targetFormat === 'base64') {
@@ -71,7 +91,7 @@ export class ProcessorService {
         // Handle built-in generation with optional templates
         const builtinProxyContent = transformBuiltinSubscription(combinedNodeList, targetFormat, {
             ...builtinOptions,
-            managedConfigUrl: ''
+            managedConfigUrl
         });
 
         if (!builtinProxyContent) {
@@ -89,11 +109,12 @@ export class ProcessorService {
 
         const shouldApplyTemplate = !builtinOptions.hiddifyCompatible;
         const builtinTemplateEntry = shouldApplyTemplate && templateSource.kind === 'builtin' ? getBuiltinTemplate(templateSource.value) : null;
+        const customTemplateEntry = shouldApplyTemplate && templateSource.kind === 'custom' ? await resolveRuleTemplateSource(storageAdapter, templateSource) : null;
         const remoteTemplateUrl = shouldApplyTemplate && templateSource.kind === 'remote' ? templateSource.value : '';
 
-        if (builtinTemplateEntry || remoteTemplateUrl) {
-            const templateText = builtinTemplateEntry?.content || await fetchTransformTemplate(storageAdapter, remoteTemplateUrl);
-            const isIniTemplate = builtinTemplateEntry?.format === 'ini' || (remoteTemplateUrl && remoteTemplateUrl.toLowerCase().endsWith('.ini'));
+        if (builtinTemplateEntry || customTemplateEntry || remoteTemplateUrl) {
+            const templateText = builtinTemplateEntry?.content || customTemplateEntry?.content || await fetchTransformTemplate(storageAdapter, remoteTemplateUrl);
+            const isIniTemplate = isIniTemplateSource(templateSource, builtinTemplateEntry || customTemplateEntry);
 
             if (templateText && isIniTemplate) {
                 const renderParams = {

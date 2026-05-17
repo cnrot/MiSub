@@ -4,6 +4,7 @@
  */
 
 import { StorageFactory } from '../../storage-adapter.js';
+import { DEFAULT_SETTINGS, KV_KEY_SETTINGS } from '../config.js';
 import { createJsonResponse, createErrorResponse } from '../utils.js';
 import { parseNodeList } from '../utils/node-parser.js';
 import { getProcessedUserAgent } from '../../utils/format-utils.js';
@@ -11,6 +12,50 @@ import { buildFetchProxyUrl } from '../../utils/fetch-proxy-utils.js';
 
 // 创建用于全局匹配的协议正则表达式
 const NODE_PROTOCOL_GLOBAL_REGEX = new RegExp('^(ss|ssr|vmess|vless|trojan|hysteria2?|hy|hy2|tuic|anytls|socks5|socks):\\/\\/', 'gm');
+
+const SUBSCRIPTION_BODY_ERROR_PATTERNS = [
+    /failed to fetch remote profile/i,
+    /\bbad request\b/i,
+    /\bforbidden\b/i,
+    /\bunauthori[sz]ed\b/i,
+    /\bnot authorized\b/i,
+    /\bsubscription protection\b/i,
+    /\bstatus\s*[:=]?\s*(400|401|403|404|429|5\d\d)\b/i,
+    /\bhttp\s*(400|401|403|404|429|5\d\d)\b/i
+];
+
+function summarizeResponseText(text) {
+    return String(text || '').replace(/\s+/g, ' ').trim().slice(0, 180);
+}
+
+function detectSubscriptionBodyError(text) {
+    const summary = summarizeResponseText(text);
+    if (!summary) return null;
+
+    const hasErrorText = SUBSCRIPTION_BODY_ERROR_PATTERNS.some(pattern => pattern.test(summary));
+    if (!hasErrorText) return null;
+
+    const statusMatch = summary.match(/\b(?:status|http)\s*[:=]?\s*(\d{3})\b/i)
+        || summary.match(/\b(400|401|403|404|429|5\d\d)\b/);
+    const status = statusMatch ? Number(statusMatch[1]) : undefined;
+    const message = status ? `HTTP ${status}: ${summary}` : summary;
+    const error = new Error(message);
+    if (status) error.status = status;
+    return error;
+}
+
+async function resolveNodeCountFetchCfOptions(env) {
+    try {
+        const storageAdapter = StorageFactory.createAdapter(env, await StorageFactory.getStorageType(env));
+        const settings = await storageAdapter.get(KV_KEY_SETTINGS) || DEFAULT_SETTINGS;
+        if (settings?.builtinSkipCertVerify === true) {
+            return { cf: { insecureSkipVerify: true } };
+        }
+    } catch (error) {
+        console.warn('[NodeHandler] Failed to load certificate verification setting, using secure default:', error);
+    }
+    return {};
+}
 
 /**
  * 获取订阅节点数量和用户信息
@@ -52,8 +97,8 @@ export async function handleNodeCountRequest(request, env) {
                 redirect: "follow"
             };
 
-            // cf 选项需传给 fetch() 而非 Request()：Cloudflare 环境生效，Node.js 安全忽略
-            const cfOptions = { cf: { insecureSkipVerify: true } };
+            // cf 选项需传给 fetch() 而非 Request()：仅在用户显式启用跳过证书验证时传递
+            const cfOptions = await resolveNodeCountFetchCfOptions(env);
             const trafficRequest = fetch(new Request(requestUrl, trafficFetchOptions), cfOptions);
             const nodeCountRequest = fetch(new Request(requestUrl, fetchOptions), cfOptions);
 
@@ -180,6 +225,13 @@ export async function handleNodeCountRequest(request, env) {
                         }
                     }
 
+                    const bodyError = detectSubscriptionBodyError(text);
+                    if (bodyError) {
+                        fetchError = bodyError;
+                        console.warn(`[NodeHandler] Node count response contains upstream error: ${bodyError.message}`);
+                        throw bodyError;
+                    }
+
                     // 使用 parseNodeList 函数，与预览功能完全一致
                     const parsedNodes = parseNodeList(text, { plusAsSpace: Boolean(plusAsSpace) });
 
@@ -211,9 +263,17 @@ export async function handleNodeCountRequest(request, env) {
                         }
                     }
 
-                    result.count = parsedNodes.length;
-                    nodeCountRequestSucceeded = true;
+                    if (parsedNodes.length > 0) {
+                        result.count = parsedNodes.length;
+                        nodeCountRequestSucceeded = true;
+                    } else {
+                        fetchError = fetchError || new Error('No valid nodes returned from subscription');
+                        console.warn(`[NodeHandler] Node count response parsed successfully but contained no valid nodes for ${subUrl}.`);
+                    }
                 } catch (e) {
+                    if (e === fetchError) {
+                        console.warn(`[NodeHandler] Skipping node count fallback because upstream returned an error body: ${e.message}`);
+                    } else {
                     // 解析失败，尝试简单统计
                     console.error('Node count parse error:', e);
 
@@ -253,6 +313,7 @@ export async function handleNodeCountRequest(request, env) {
                             nodeCountRequestSucceeded = true;
                         }
                     }
+                    }
                 }
             } else if (responses[1].status === 'rejected') {
                 if (!fetchError) fetchError = responses[1].reason;
@@ -263,36 +324,39 @@ export async function handleNodeCountRequest(request, env) {
             }
 
             // 检查是否两个请求都失败了
-            if (!trafficRequestSucceeded && !nodeCountRequestSucceeded) {
+            if (!nodeCountRequestSucceeded) {
                 // 两个请求都失败,返回错误信息
                 let errorType = 'fetch_failed';
-                let errorMessage = '订阅获取失败';
+                let errorMessage = 'No valid nodes returned from subscription';
 
                 if (fetchError) {
                     if (fetchError.name === 'AbortError' || fetchError.message?.includes('timeout')) {
                         errorType = 'timeout';
                         errorMessage = '订阅请求超时';
+                    } else if (fetchError.message?.includes('HTTP')) {
+                        errorType = 'server';
+                        errorMessage = fetchError.message;
                     } else if (fetchError.message?.includes('network') || fetchError.message?.includes('fetch')) {
                         errorType = 'network';
                         errorMessage = '网络连接失败';
-                    } else if (fetchError.message?.includes('HTTP')) {
-                        errorType = 'server';
+                    } else if (fetchError.message) {
                         errorMessage = fetchError.message;
                     }
                 }
 
-                console.error(`[Node Count] Both requests failed for ${subUrl}: ${errorMessage}`);
+                console.error(`[Node Count] Node count update failed for ${subUrl}: ${errorMessage}`);
                 return createJsonResponse({
                     success: false,
                     error: errorMessage,
                     errorType: errorType,
+                    status: fetchError?.status || null,
                     count: 0,
-                    userInfo: null
+                    userInfo: result.userInfo || null
                 });
             }
 
             // 只有在至少获取到一个有效信息时，才更新数据库
-            if (result.userInfo || result.count > 0) {
+            if (result.count > 0) {
                 const storageAdapter = StorageFactory.createAdapter(env, await StorageFactory.getStorageType(env));
                 const originalSubs = await storageAdapter.get('misub_subscriptions_v1') || [];
                 const subToUpdate = originalSubs.find(s => s.url === subUrl);

@@ -16,13 +16,17 @@ function handleApiError(error, context = '') {
     let errorType = 'unknown';
     let errorMessage = '未知错误';
 
+    let status = null;
+
     if (error instanceof APIError) {
+        status = error.status;
         if (error.status === 401) {
             errorType = 'auth';
             errorMessage = '认证失败,请重新登录';
         } else {
             errorType = 'server';
-            errorMessage = error.message || `HTTP ${error.status}`;
+            const message = error.message || `HTTP ${error.status}`;
+            errorMessage = formatHttpErrorMessage(error.status, message);
         }
     } else if (error.name === 'AbortError') {
         errorType = 'timeout';
@@ -46,7 +50,34 @@ function handleApiError(error, context = '') {
     return {
         success: false,
         error: errorMessage,
-        errorType: errorType
+        errorType: errorType,
+        status
+    };
+}
+
+function extractHttpStatus(message = '') {
+    const match = String(message).match(/HTTP\s+(\d{3})/i);
+    return match ? Number(match[1]) : null;
+}
+
+function formatHttpErrorMessage(status, message = '') {
+    const normalizedMessage = String(message || '').trim();
+    if (!status) return normalizedMessage;
+    if (new RegExp(`^HTTP\\s+${status}\\b`, 'i').test(normalizedMessage)) {
+        return normalizedMessage;
+    }
+    return `HTTP ${status}: ${normalizedMessage || `HTTP ${status}`}`;
+}
+
+function normalizeApiFailure(data, fallbackMessage = '操作失败') {
+    const error = data?.error || data?.message || fallbackMessage;
+    const status = data?.status || extractHttpStatus(error);
+    return {
+        success: false,
+        error,
+        errorType: data?.errorType || (status ? 'server' : 'unknown'),
+        status,
+        data
     };
 }
 export async function fetchInitialData() {
@@ -114,6 +145,10 @@ export async function fetchNodeCount(subUrl, fetchProxy = '', plusAsSpace = fals
         const data = await api.post('/api/node_count', payload, { signal: controller.signal });
         clearTimeout(timeoutId);
 
+        if (data?.success === false) {
+            return normalizeApiFailure(data, '更新节点信息失败');
+        }
+
         return { success: true, data }; // data 包含 { count, userInfo }
     } catch (error) {
         return handleApiError(error, 'fetchNodeCount');
@@ -171,6 +206,10 @@ export async function batchUpdateNodes(subscriptionIds) {
 
         const result = await api.post('/api/batch_update_nodes', { subscriptionIds }, { signal: controller.signal });
         clearTimeout(timeoutId);
+
+        if (result?.success === false) {
+            return normalizeApiFailure(result, '批量更新节点信息失败');
+        }
 
         return result;
     } catch (error) {

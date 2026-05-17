@@ -8,8 +8,10 @@ import { getCookieSecret, getAdminPassword, setAdminPassword, isUsingDefaultPass
 import { authMiddleware, handleLogin, handleLogout, createUnauthorizedResponse } from './auth-middleware.js';
 import { sendTgNotification, checkAndNotify } from './notifications.js';
 import { clearAllNodeCaches } from '../services/node-cache-service.js';
+import { buildSubscriptionNodeCacheKey } from '../services/subscription-service.js';
 
 import { KV_KEY_SUBS, KV_KEY_PROFILES, KV_KEY_SETTINGS, DEFAULT_SETTINGS as defaultSettings } from './config.js';
+import { listRuleTemplates } from './rule-template-handler.js';
 
 const PROFILE_DOWNLOAD_COUNT_PREFIX = 'misub_profile_download_count_';
 
@@ -141,14 +143,18 @@ export async function handleDataRequest(env) {
         }
         const storageAdapter = StorageFactory.createAdapter(env, storageType);
         const cachedSettings = await SettingsCache.get(env);
-        const [misubs, rawProfiles, settings] = await Promise.all([
+        const [misubs, rawProfiles, settings, ruleTemplates] = await Promise.all([
             typeof storageAdapter.getAllSubscriptions === 'function'
                 ? storageAdapter.getAllSubscriptions()
                 : storageAdapter.get(KV_KEY_SUBS).then(res => res || []),
             typeof storageAdapter.getAllProfiles === 'function'
                 ? storageAdapter.getAllProfiles()
                 : storageAdapter.get(KV_KEY_PROFILES).then(res => res || []),
-            Promise.resolve(cachedSettings || {}).then(res => res || {})
+            Promise.resolve(cachedSettings || {}).then(res => res || {}),
+            listRuleTemplates(storageAdapter).catch(error => {
+                console.warn('[API /data] Failed to load custom rule templates:', error?.message || error);
+                return [];
+            })
         ]);
         const profiles = await attachProfileDownloadCounts(storageAdapter, rawProfiles);
 
@@ -163,7 +169,7 @@ export async function handleDataRequest(env) {
             ...settings,
             isDefaultPassword: await isUsingDefaultPassword(env)
         };
-        return createJsonResponse({ misubs, profiles, config });
+        return createJsonResponse({ misubs, profiles, ruleTemplates, config });
     } catch (e) {
         console.error('[API Error /data] Failed to read from storage', {
             error: e?.message,
@@ -353,8 +359,11 @@ export async function handleMisubsSave(request, env) {
 
         // 步骤6.5: 清除节点缓存（订阅变动后确保拉取最新数据）
         try {
-            const cacheResult = await clearAllNodeCaches(storageAdapter);
-            console.info(`[API] Cleared ${cacheResult.cleared} node caches after subscription update`);
+            const preserveKeys = (Array.isArray(finalMisubs) ? finalMisubs : [])
+                .filter(sub => sub?.enableNodeCache === true)
+                .map(sub => buildSubscriptionNodeCacheKey(sub));
+            const cacheResult = await clearAllNodeCaches(storageAdapter, { preserveKeys });
+            console.info(`[API] Cleared ${cacheResult.cleared} node caches after subscription update, preserved ${cacheResult.skipped || 0}`);
         } catch (cacheError) {
             // 缓存清除失败不影响保存结果
             console.warn('[API] Failed to clear node caches:', cacheError.message);
