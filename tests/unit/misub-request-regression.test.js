@@ -31,6 +31,10 @@ function createStorageAdapter({ settings = {}, subscriptions = [], profiles = []
     };
 }
 
+function silenceExpectedRequestLogs() {
+    return vi.spyOn(console, 'log').mockImplementation(() => {});
+}
+
 describe('handleMisubRequest regression coverage', () => {
     beforeEach(() => {
         vi.resetModules();
@@ -58,25 +62,33 @@ describe('handleMisubRequest regression coverage', () => {
         createAdapter.mockReturnValue(adapter);
         vi.stubGlobal('fetch', vi.fn(async () => new Response('trojan://pass@example.com:443#HK', { status: 200 })));
 
-        const { handleMisubRequest } = await import('../../functions/modules/subscription/main-handler.js');
-        const response = await handleMisubRequest({
-            request: new Request('https://misub.example/stable-token?target=nodes&refresh=1', {
-                headers: { 'User-Agent': 'ClashMeta' }
-            }),
-            env: {},
-            waitUntil: vi.fn()
-        });
-        const text = await response.text();
+        const logSpy = silenceExpectedRequestLogs();
+        try {
+            const { handleMisubRequest } = await import('../../functions/modules/subscription/main-handler.js');
+            const response = await handleMisubRequest({
+                request: new Request('https://misub.example/stable-token?target=nodes&refresh=1', {
+                    headers: { 'User-Agent': 'ClashMeta' }
+                }),
+                env: {},
+                waitUntil: vi.fn()
+            });
+            const text = await response.text();
 
-        expect(response.status).toBe(200);
-        expect(text).toContain('trojan://pass@example.com:443#');
-        expect(adapter.put).toHaveBeenCalledWith(
-            'node_cache_subscription_sub-a',
-            expect.objectContaining({
-                nodes: ['trojan://pass@example.com:443#HK'],
-                nodeCount: 1
-            })
-        );
+            expect(response.status).toBe(200);
+            expect(text).toContain('trojan://pass@example.com:443#');
+            expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('[MiSub Request]'));
+            expect(logSpy).toHaveBeenCalledWith('[MiSub UA] ClashMeta');
+            expect(logSpy).toHaveBeenCalledWith('[MiSub Nodes] Count/Length: 68');
+            expect(adapter.put).toHaveBeenCalledWith(
+                'node_cache_subscription_sub-a',
+                expect.objectContaining({
+                    nodes: ['trojan://pass@example.com:443#HK'],
+                    nodeCount: 1
+                })
+            );
+        } finally {
+            logSpy.mockRestore();
+        }
     });
 
     it('normalizes external converter hosts and sends preprocessed nodes inline', async () => {
@@ -98,24 +110,31 @@ describe('handleMisubRequest regression coverage', () => {
         createAdapter.mockReturnValue(adapter);
         vi.stubGlobal('fetch', vi.fn(async () => new Response('trojan://pass@example.com:443#HK', { status: 200 })));
 
-        const { handleMisubRequest } = await import('../../functions/modules/subscription/main-handler.js');
-        const initialResponse = await handleMisubRequest({
-            request: new Request('https://misub.example/stable-token?target=clash&refresh=1', {
-                headers: { 'User-Agent': 'ClashMeta' }
-            }),
-            env: {},
-            waitUntil: vi.fn()
-        });
-        const redirectUrl = new URL(initialResponse.headers.get('Location'));
-        const inlineNodeList = redirectUrl.searchParams.get('url');
+        const logSpy = silenceExpectedRequestLogs();
+        try {
+            const { handleMisubRequest } = await import('../../functions/modules/subscription/main-handler.js');
+            const initialResponse = await handleMisubRequest({
+                request: new Request('https://misub.example/stable-token?target=clash&refresh=1', {
+                    headers: { 'User-Agent': 'ClashMeta' }
+                }),
+                env: {},
+                waitUntil: vi.fn()
+            });
+            const redirectUrl = new URL(initialResponse.headers.get('Location'));
+            const inlineNodeList = redirectUrl.searchParams.get('url');
 
-        expect(initialResponse.status).toBe(302);
-        expect(redirectUrl.origin + redirectUrl.pathname).toBe('https://sub.example/sub');
-        expect(redirectUrl.searchParams.get('target')).toBe('clash');
-        expect(inlineNodeList).toContain('trojan://pass@example.com:443#');
-        expect(inlineNodeList).not.toContain('misub.example');
-        expect(inlineNodeList).not.toContain('target=nodes');
-        expect(inlineNodeList).not.toContain('\n');
+            expect(initialResponse.status).toBe(302);
+            expect(redirectUrl.origin + redirectUrl.pathname).toBe('https://sub.example/sub');
+            expect(redirectUrl.searchParams.get('target')).toBe('clash');
+            expect(inlineNodeList).toContain('trojan://pass@example.com:443#');
+            expect(inlineNodeList).not.toContain('misub.example');
+            expect(inlineNodeList).not.toContain('target=nodes');
+            expect(inlineNodeList).not.toContain('\n');
+            expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('[MiSub Request]'));
+            expect(logSpy).toHaveBeenCalledWith('[MiSub Nodes] Count/Length: 68');
+        } finally {
+            logSpy.mockRestore();
+        }
     });
 
     it.each([
@@ -142,23 +161,30 @@ describe('handleMisubRequest regression coverage', () => {
         createAdapter.mockReturnValue(adapter);
         vi.stubGlobal('fetch', vi.fn(async () => new Response('trojan://pass@example.com:443#HK', { status: 200 })));
 
-        const { handleMisubRequest } = await import('../../functions/modules/subscription/main-handler.js');
-        const response = await handleMisubRequest({
-            request: new Request('https://misub.example/stable-token?target=clash&refresh=1', {
-                headers: { 'User-Agent': 'ClashMeta' }
-            }),
-            env: {},
-            waitUntil: vi.fn()
-        });
-        const redirectUrl = new URL(response.headers.get('Location'));
-        const inlineNodeList = redirectUrl.searchParams.get('url');
+        const logSpy = silenceExpectedRequestLogs();
+        try {
+            const { handleMisubRequest } = await import('../../functions/modules/subscription/main-handler.js');
+            const response = await handleMisubRequest({
+                request: new Request('https://misub.example/stable-token?target=clash&refresh=1', {
+                    headers: { 'User-Agent': 'ClashMeta' }
+                }),
+                env: {},
+                waitUntil: vi.fn()
+            });
+            const redirectUrl = new URL(response.headers.get('Location'));
+            const inlineNodeList = redirectUrl.searchParams.get('url');
 
-        expect(response.status).toBe(302);
-        expect(redirectUrl.origin + redirectUrl.pathname).toBe(expectedEndpoint);
-        expect(redirectUrl.searchParams.get('target')).toBe('clash');
-        expect(inlineNodeList).toContain('trojan://pass@example.com:443#');
-        expect(inlineNodeList).not.toContain('target=nodes');
-        expect(inlineNodeList).not.toContain('\n');
+            expect(response.status).toBe(302);
+            expect(redirectUrl.origin + redirectUrl.pathname).toBe(expectedEndpoint);
+            expect(redirectUrl.searchParams.get('target')).toBe('clash');
+            expect(inlineNodeList).toContain('trojan://pass@example.com:443#');
+            expect(inlineNodeList).not.toContain('target=nodes');
+            expect(inlineNodeList).not.toContain('\n');
+            expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('[MiSub Request]'));
+            expect(logSpy).toHaveBeenCalledWith('[MiSub Nodes] Count/Length: 51');
+        } finally {
+            logSpy.mockRestore();
+        }
     });
 
     it('returns current fetch traffic header on the first builtin response', async () => {
@@ -182,20 +208,27 @@ describe('handleMisubRequest regression coverage', () => {
         })));
 
         const waitUntilPromises = [];
-        const { handleMisubRequest } = await import('../../functions/modules/subscription/main-handler.js');
-        const response = await handleMisubRequest({
-            request: new Request('https://misub.example/stable-token?target=clash&refresh=1&builtin=true', {
-                headers: { 'User-Agent': 'ClashMeta' }
-            }),
-            env: {},
-            waitUntil: promise => waitUntilPromises.push(promise)
-        });
-        const text = await response.text();
+        const logSpy = silenceExpectedRequestLogs();
+        try {
+            const { handleMisubRequest } = await import('../../functions/modules/subscription/main-handler.js');
+            const response = await handleMisubRequest({
+                request: new Request('https://misub.example/stable-token?target=clash&refresh=1&builtin=true', {
+                    headers: { 'User-Agent': 'ClashMeta' }
+                }),
+                env: {},
+                waitUntil: promise => waitUntilPromises.push(promise)
+            });
+            const text = await response.text();
 
-        expect(response.status).toBe(200);
-        expect(text).toContain('proxies:');
-        expect(response.headers.get('Subscription-Userinfo')).toBe('upload=10; download=20; total=1000; expire=2000');
-        expect(waitUntilPromises.length).toBeGreaterThan(0);
+            expect(response.status).toBe(200);
+            expect(text).toContain('proxies:');
+            expect(response.headers.get('Subscription-Userinfo')).toBe('upload=10; download=20; total=1000; expire=2000');
+            expect(waitUntilPromises.length).toBeGreaterThan(0);
+            expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('[MiSub Request]'));
+            expect(logSpy).toHaveBeenCalledWith('[MiSub Nodes] Count/Length: 51');
+        } finally {
+            logSpy.mockRestore();
+        }
     });
 
     it('does not return stale traffic header when current external pull has zero nodes with protective cache disabled', async () => {
@@ -216,25 +249,117 @@ describe('handleMisubRequest regression coverage', () => {
         vi.stubGlobal('fetch', vi.fn(async () => new Response('Forbidden', { status: 403 })));
 
         const waitUntilPromises = [];
-        const { handleMisubRequest } = await import('../../functions/modules/subscription/main-handler.js');
-        const response = await handleMisubRequest({
-            request: new Request('https://misub.example/stable-token?target=nodes&refresh=1', {
-                headers: { 'User-Agent': 'ClashMeta' }
-            }),
-            env: {},
-            waitUntil: promise => waitUntilPromises.push(promise)
+        const logSpy = silenceExpectedRequestLogs();
+        try {
+            const { handleMisubRequest } = await import('../../functions/modules/subscription/main-handler.js');
+            const response = await handleMisubRequest({
+                request: new Request('https://misub.example/stable-token?target=nodes&refresh=1', {
+                    headers: { 'User-Agent': 'ClashMeta' }
+                }),
+                env: {},
+                waitUntil: promise => waitUntilPromises.push(promise)
+            });
+            const text = await response.text();
+
+            expect(response.status).toBe(200);
+            expect(text.trim()).toBe('');
+            expect(response.headers.get('Subscription-Userinfo')).toBeNull();
+            expect(waitUntilPromises.length).toBeGreaterThan(0);
+            expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('[MiSub Request]'));
+            expect(logSpy).toHaveBeenCalledWith('[MiSub Nodes] Count/Length: 0');
+
+            await Promise.all(waitUntilPromises);
+
+            const [updatedSub] = adapter.store.get('misub_subscriptions_v1');
+            expect(updatedSub.nodeCount).toBe(0);
+            expect(updatedSub.userInfo).toBeNull();
+        } finally {
+            logSpy.mockRestore();
+        }
+    });
+
+
+    it('serves disguise content before token validation for unauthenticated browser subscription visits', async () => {
+        const adapter = createStorageAdapter({
+            settings: {
+                mytoken: 'stable-token',
+                enableFlagEmoji: false,
+                enableTrafficNode: false,
+                disguise: { enabled: true, type: 'notfound' }
+            },
+            subscriptions: [{
+                id: 'sub-a',
+                name: 'Airport A',
+                url: 'https://airport.example/sub',
+                enabled: true
+            }]
         });
-        const text = await response.text();
+        createAdapter.mockReturnValue(adapter);
+        vi.stubGlobal('fetch', vi.fn(async () => new Response('trojan://pass@example.com:443#HK', { status: 200 })));
 
-        expect(response.status).toBe(200);
-        expect(text.trim()).toBe('');
-        expect(response.headers.get('Subscription-Userinfo')).toBeNull();
-        expect(waitUntilPromises.length).toBeGreaterThan(0);
+        const logSpy = silenceExpectedRequestLogs();
+        try {
+            const { handleMisubRequest } = await import('../../functions/modules/subscription/main-handler.js');
+            const response = await handleMisubRequest({
+                request: new Request('https://misub.example/wrong-token?target=nodes', {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/125.0 Safari/537.36',
+                        Accept: 'text/html'
+                    }
+                }),
+                env: {},
+                waitUntil: vi.fn()
+            });
+            const text = await response.text();
 
-        await Promise.all(waitUntilPromises);
+            expect(response.status).toBe(404);
+            expect(response.headers.get('Content-Type')).toContain('text/html');
+            expect(text).not.toContain('Invalid Token');
+            expect(text).not.toContain('trojan://pass@example.com');
+            expect(globalThis.fetch).not.toHaveBeenCalled();
+        } finally {
+            logSpy.mockRestore();
+        }
+    });
 
-        const [updatedSub] = adapter.store.get('misub_subscriptions_v1');
-        expect(updatedSub.nodeCount).toBe(0);
-        expect(updatedSub.userInfo).toBeNull();
+    it.each(['refresh', 'nocache', 'debug'])('bypasses fresh aggregate cache when %s is present', async (paramName) => {
+        const subscriptions = [{
+            id: 'sub-a',
+            name: 'Airport A',
+            url: 'https://airport.example/sub',
+            enabled: true
+        }];
+        const adapter = createStorageAdapter({
+            settings: { mytoken: 'stable-token', enableFlagEmoji: false, enableTrafficNode: false },
+            subscriptions
+        });
+        adapter.store.set('node_cache_token_stable-token', {
+            nodes: 'trojan://cached@example.com:443#Cached\n',
+            timestamp: Date.now(),
+            nodeCount: 1,
+            sources: ['Airport A']
+        });
+        createAdapter.mockReturnValue(adapter);
+        vi.stubGlobal('fetch', vi.fn(async () => new Response('trojan://fresh@example.com:443#Fresh', { status: 200 })));
+
+        const logSpy = silenceExpectedRequestLogs();
+        try {
+            const { handleMisubRequest } = await import('../../functions/modules/subscription/main-handler.js');
+            const response = await handleMisubRequest({
+                request: new Request(`https://misub.example/stable-token?target=nodes&${paramName}=1`, {
+                    headers: { 'User-Agent': 'ClashMeta' }
+                }),
+                env: {},
+                waitUntil: vi.fn()
+            });
+            const text = await response.text();
+
+            expect(response.status).toBe(200);
+            expect(text).toContain('trojan://fresh@example.com:443#');
+            expect(text).not.toContain('trojan://cached@example.com:443#');
+            expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+        } finally {
+            logSpy.mockRestore();
+        }
     });
 });

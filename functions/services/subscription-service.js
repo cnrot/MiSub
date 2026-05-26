@@ -9,6 +9,7 @@ import { getProcessedUserAgent } from '../utils/format-utils.js';
 import { prependNodeName, addFlagEmoji, removeFlagEmoji, fixNodeUrlEncoding, sanitizeNodeForYaml } from '../utils/node-utils.js';
 import { runOperatorChain } from '../utils/operator-runner.js';
 import { createTimeoutFetch } from '../modules/utils.js';
+import { assertPublicNetworkUrl } from '../modules/security-utils.js';
 
 /**
  * 订阅获取配置常量
@@ -401,6 +402,7 @@ const prependGroupName = profilePrefixSettings?.prependGroupName ?? false;
 
     const httpSubs = misubs.filter(sub => sub && sub.url && sub.url.toLowerCase().startsWith('http'));
     const limiter = createConcurrencyLimiter(FETCH_CONFIG.CONCURRENCY);
+    let upstreamSuccessCount = 0; // 追踪真正从远程拉取成功的订阅数（不含 per-sub 缓存回退）
 
     /**
      * 获取单个订阅内容
@@ -430,12 +432,14 @@ const prependGroupName = profilePrefixSettings?.prependGroupName ?? false;
             const requestHeaders = { 'User-Agent': processedUserAgent };
 
             // [Fetch Proxy] 获取单点订阅专属拉取代理前缀
+            assertPublicNetworkUrl(sub.url);
             let requestUrl = sub.url;
             if (sub.fetchProxy && typeof sub.fetchProxy === 'string' && sub.fetchProxy.trim()) {
                 const proxyPrefix = sub.fetchProxy.trim();
                 // 将被代理的 URL 进行编码，拼接到代理前缀之后
                 requestUrl = `${proxyPrefix}${encodeURIComponent(sub.url)}`;
             }
+            requestUrl = assertPublicNetworkUrl(requestUrl).toString();
 
             const response = await fetchWithRetry(requestUrl, {
                 headers: requestHeaders,
@@ -488,6 +492,7 @@ const prependGroupName = profilePrefixSettings?.prependGroupName ?? false;
             }
 
             if (realNodes.length > 0) {
+                upstreamSuccessCount++;
                 const userInfo = parseSubscriptionUserInfoHeader(response.headers.get('subscription-userinfo'));
                 const runtimeInfo = {
                     nodeCount: realNodes.length,
@@ -598,6 +603,7 @@ const prependGroupName = profilePrefixSettings?.prependGroupName ?? false;
                 sourceCount: httpSubs.length,
                 successCount,
                 failCount,
+                upstreamSuccessCount,
                 duration: endTime - (context.startTime || Date.now())
             };
         }

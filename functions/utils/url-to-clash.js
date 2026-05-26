@@ -562,6 +562,11 @@ function parseSsUrl(url) {
             if (pluginDetails) {
                 proxy.plugin = pluginDetails.name;
                 proxy['plugin-opts'] = pluginDetails.opts;
+
+                const obfsMode = params.get('obfs');
+                const obfsHost = params.get('obfs-host');
+                if (obfsMode) proxy['plugin-opts'].mode = obfsMode;
+                if (obfsHost) proxy['plugin-opts'].host = obfsHost;
                 
                 // 协议兼容性映射 (TLS / Host)
                 if (pluginDetails.opts.tls || pluginDetails.opts.mode?.includes('tls') || pluginDetails.opts.security === 'tls') {
@@ -683,17 +688,24 @@ function parseTuicUrl(url) {
         // tuic://token@server:port?sni=xxx&alpn=xxx#name
         const body = url.substring(7); // 去掉 tuic://
 
-        const atIndex = body.indexOf('@');
+        const atIndex = body.lastIndexOf('@');
         if (atIndex === -1) return null;
 
-        let token = body.substring(0, atIndex);
-        try {
-            token = decodeURIComponent(token);
-        } catch { }
+        const token = body.substring(0, atIndex);
+        const separatorIndex = token.indexOf(':');
+        const rawUuid = separatorIndex === -1 ? token : token.substring(0, separatorIndex);
+        const rawPassword = separatorIndex === -1 ? '' : token.substring(separatorIndex + 1);
 
-        const tokenParts = token.split(':');
-        const uuid = tokenParts[0] || '';
-        const password = tokenParts[1] || '';
+        const safeDecode = (value) => {
+            try {
+                return decodeURIComponent(value);
+            } catch {
+                return value;
+            }
+        };
+
+        const uuid = safeDecode(rawUuid);
+        const password = safeDecode(rawPassword);
 
         let serverPart = body.substring(atIndex + 1);
         const queryIndex = serverPart.indexOf('?');
