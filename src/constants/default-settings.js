@@ -17,6 +17,7 @@ export const DEFAULT_SETTINGS = {
     builtinLoonSkipCertVerify: false,
     enableAccessLog: false,
     accessLogPersistenceMode: 'light',
+    mergeExpireStrategy: 'max',
     NotifyThresholdDays: 3,
     NotifyThresholdPercent: 90,
     enableTrafficNode: false,
@@ -31,6 +32,7 @@ manualNodePrefix: '\u624b\u52a8\u8282\u70b9',
 subscriptionPrefix: '',
 prependGroupName: false
 },
+    manualNodeGroupOrder: [], // 用户自定义的分组顺序
     defaultNodeTransform: {
         enabled: false,
         filter: {

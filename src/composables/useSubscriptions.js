@@ -6,6 +6,7 @@ import { useToastStore } from '../stores/toast.js';
 import { fetchNodeCount, batchUpdateNodes } from '../lib/api.js';
 import { handleError } from '../utils/errorHandler.js';
 import { TIMING } from '../constants/timing.js';
+import { t } from '../i18n/index.js';
 
 const isDev = import.meta.env.DEV;
 
@@ -28,6 +29,7 @@ export function useSubscriptions(markDirty) {
   const totalRemainingTraffic = computed(() => {
     const REASONABLE_TRAFFIC_LIMIT_BYTES = 10 * 1024 * 1024 * 1024 * 1024 * 1024; // 10 PB in bytes
     return subscriptions.value.reduce((acc, sub) => {
+      if (sub.excludeTraffic) return acc;
       if (
         sub.enabled &&
         sub.userInfo &&
@@ -72,7 +74,7 @@ export function useSubscriptions(markDirty) {
         console.warn(`[handleUpdateNodeCount] Timeout protection triggered for ${subToUpdate.name}`);
         subToUpdate.isUpdating = false;
         if (!isInitialLoad) {
-          showToast(`${subToUpdate.name || '订阅'} 更新超时,已自动重置`, 'warning');
+          showToast(t('subscriptions.updateTimeoutReset', { name: subToUpdate.name || t('subscriptions.fallbackName') }), 'warning');
         }
       }
     }, TIMING.REQUEST_TIMEOUT_MS);
@@ -85,25 +87,26 @@ export function useSubscriptions(markDirty) {
 
                 // 检查是否成功
                 if (!result.success) {
-                    let userMessage = `${subToUpdate.name || '订阅'} 更新失败`;
+                    const subscriptionName = subToUpdate.name || t('subscriptions.fallbackName');
+                    let userMessage = t('subscriptions.updateFailed', { name: subscriptionName });
 
                     // 根据 errorType 提供更友好的错误提示
                     switch (result.errorType) {
                         case 'timeout':
-                            userMessage = `${subToUpdate.name || '订阅'} 更新超时,请稍后重试`;
+                            userMessage = t('subscriptions.updateTimeoutRetry', { name: subscriptionName });
                             break;
                         case 'network':
-                            userMessage = `${subToUpdate.name || '订阅'} 网络连接失败`;
+                            userMessage = t('subscriptions.networkFailed', { name: subscriptionName });
                             break;
                         case 'server':
-                            userMessage = `${subToUpdate.name || '订阅'} 服务器错误`;
+                            userMessage = t('subscriptions.serverError', { name: subscriptionName });
                             break;
                         default:
-                            userMessage = `${subToUpdate.name || '订阅'} 更新失败: ${result.error || '未知错误'}`;
+                            userMessage = t('subscriptions.updateFailedWithMessage', { name: subscriptionName, message: result.error || t('subscriptions.unknownError') });
                     }
 
                     if (result.errorType === 'server' && (result.error || result.status)) {
-                        userMessage = `${subToUpdate.name || '订阅'} 更新失败: ${result.error || `HTTP ${result.status}`}`;
+                        userMessage = t('subscriptions.updateFailedWithMessage', { name: subscriptionName, message: result.error || `HTTP ${result.status}` });
                     }
 
                     // 只有非静默加载时才显示 Toast
@@ -130,7 +133,7 @@ export function useSubscriptions(markDirty) {
                 subToUpdate.lastError = null; // 成功后清除错误状态
 
                 if (!isInitialLoad) {
-                    showToast(`${subToUpdate.name || '订阅'} 更新成功！`, 'success');
+                    showToast(t('subscriptions.updateSuccess', { name: subToUpdate.name || t('subscriptions.fallbackName') }), 'success');
                     markDirty();
                     // 自动保存手动更新的结果
                     void dataStore.saveData();
@@ -145,7 +148,7 @@ export function useSubscriptions(markDirty) {
         isInitialLoad
       });
 
-      const errorMessage = `${subToUpdate.name || '订阅'} 更新过程中发生错误`;
+      const errorMessage = t('subscriptions.updateUnexpectedError', { name: subToUpdate.name || t('subscriptions.fallbackName') });
       if (!isInitialLoad) {
         showToast(errorMessage, 'error');
       }
@@ -197,7 +200,7 @@ export function useSubscriptions(markDirty) {
 
     // 如果没有订阅，提示并返回
     if (idsToRemove.length === 0) {
-      showToast('没有可删除的订阅', 'info');
+      showToast(t('subscriptions.noSubscriptionsToDelete'), 'info');
       return;
     }
 
@@ -207,7 +210,7 @@ export function useSubscriptions(markDirty) {
 
     subsCurrentPage.value = 1;
     markDirty();
-    showToast(`已清空 ${idsToRemove.length} 个订阅`, 'success');
+    showToast(t('subscriptions.clearedCount', { count: idsToRemove.length }), 'success');
   }
 
   async function addSubscriptionsFromBulk(subs) {
@@ -220,7 +223,7 @@ export function useSubscriptions(markDirty) {
     const subsToUpdate = subs.filter(sub => sub.url && sub.url.startsWith('http'));
 
     if (subsToUpdate.length > 0) {
-      showToast(`正在批量更新 ${subsToUpdate.length} 个订阅...`, 'info');
+      showToast(t('subscriptions.batchUpdating', { count: subsToUpdate.length }), 'info');
 
       // Use individual updates instead of batch backend update
       // This avoids 400 error because backend doesn't have these IDs yet.
@@ -228,12 +231,12 @@ export function useSubscriptions(markDirty) {
 
       try {
         await Promise.allSettled(updatePromises);
-        showToast('批量导入并更新完成！', 'success');
+        showToast(t('subscriptions.bulkImportUpdateDone'), 'success');
       } catch (e) {
         console.error("Batch update finished with some errors");
       }
     } else {
-      showToast('批量导入完成！', 'success');
+      showToast(t('subscriptions.bulkImportDone'), 'success');
     }
   }
 
@@ -243,12 +246,12 @@ export function useSubscriptions(markDirty) {
     );
 
     if (subsToUpdate.length === 0) {
-      showToast('没有可刷新的订阅', 'info');
+      showToast(t('subscriptions.noRefreshableSubscriptions'), 'info');
       return;
     }
 
     subsToUpdate.forEach(sub => { sub.isUpdating = true; });
-    showToast(`正在刷新 ${subsToUpdate.length} 个订阅...`, 'info');
+    showToast(t('subscriptions.refreshing', { count: subsToUpdate.length }), 'info');
 
     try {
       const result = await batchUpdateNodes(subsToUpdate.map(sub => sub.id));
@@ -282,17 +285,17 @@ export function useSubscriptions(markDirty) {
         }
 
         const failedCount = subsToUpdate.length - successCount;
-        showToast(`全部刷新完成：成功 ${successCount}/${subsToUpdate.length}，失败 ${failedCount}`, 'success');
+        showToast(t('subscriptions.refreshDone', { success: successCount, total: subsToUpdate.length, failed: failedCount }), 'success');
         markDirty();
       } else {
-        showToast(`全部刷新失败: ${result?.message || '未知错误'}`, 'error');
+        showToast(t('subscriptions.refreshFailed', { message: result?.message || t('subscriptions.unknownError') }), 'error');
         for (const sub of subsToUpdate) {
           await handleUpdateNodeCount(sub.id);
         }
       }
     } catch (error) {
       handleError(error, 'Batch Subscription Update Error', { subscriptionCount: subsToUpdate.length });
-      showToast('全部刷新失败，正在降级逐个更新...', 'error');
+      showToast(t('subscriptions.refreshFallback'), 'error');
       for (const sub of subsToUpdate) {
         await handleUpdateNodeCount(sub.id);
       }

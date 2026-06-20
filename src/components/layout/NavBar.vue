@@ -8,6 +8,7 @@ import BaseIcon from '../ui/BaseIcon.vue';
 import BrandLogo from './BrandLogo.vue';
 import NavActionGroup from './NavActionGroup.vue';
 import { MAIN_NAV_ITEMS } from '../../constants/navigation.js';
+import { useI18n } from '../../i18n/index.js';
 
 const route = useRoute();
 const uiStore = useUIStore();
@@ -15,6 +16,7 @@ const sessionStore = useSessionStore();
 const { publicConfig } = storeToRefs(sessionStore);
 const isPublicEnabled = computed(() => publicConfig.value?.enablePublicPage === true);
 const hideBranding = computed(() => publicConfig.value?.customPage?.enabled === true && publicConfig.value?.customPage?.hideBranding === true);
+const { t } = useI18n();
 
 const props = defineProps({
   isLoggedIn: Boolean
@@ -35,8 +37,8 @@ function isActive(path) {
 <template>
   <!-- Mobile Top Header -->
   <header
-    aria-label="顶部导航栏"
-    class="md:hidden sticky top-0 z-50 flex items-center justify-between px-4 py-2.5 w-full bg-white/85 dark:bg-[#030712]/85 backdrop-blur-xl border-b border-gray-200/50 dark:border-white/5 shadow-sm transition-all duration-300"
+    :aria-label="t('nav.top')"
+    class="app-nav-bar md:hidden sticky top-0 z-50 flex items-center justify-between px-4 py-2.5 w-full bg-white/90 dark:bg-[#030712]/88 backdrop-blur-xl border-b border-gray-200/60 dark:border-white/10 shadow-sm transition-all duration-300"
   >
     <BrandLogo text-size-class="text-lg" :icon-size="32" />
 
@@ -53,8 +55,8 @@ function isActive(path) {
 
   <!-- Desktop Header -->
   <header
-    aria-label="主导航栏"
-    class="hidden md:block sticky top-0 z-50 w-full bg-white/85 dark:bg-[#030712]/85 backdrop-blur-xl border-b border-gray-200/50 dark:border-white/5 transition-all duration-300"
+    :aria-label="t('nav.main')"
+    class="app-nav-bar hidden md:block sticky top-0 z-50 w-full bg-white/90 dark:bg-[#030712]/88 backdrop-blur-xl border-b border-gray-200/60 dark:border-white/10 transition-all duration-300"
   >
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 md:h-20 flex items-center justify-between">
       <!-- Logo Area -->
@@ -62,8 +64,7 @@ function isActive(path) {
         <BrandLogo text-size-class="text-lg" :icon-size="32" />
       </div>
 
-      <!-- Navigation Links -->
-      <nav aria-label="主导航" class="flex items-center gap-1">
+      <nav :aria-label="t('nav.main')" class="nav-tab-shell">
         <router-link
           v-for="item in navItems"
           :key="item.path"
@@ -78,7 +79,12 @@ function isActive(path) {
           <!-- Active Background Pill -->
           <div v-if="isActive(item.path)" class="nav-tab-active-pill"></div>
 
-          <span class="relative z-10">{{ item.name }}</span>
+          <BaseIcon
+            :path="item.iconPath"
+            className="relative z-10 h-4 w-4 shrink-0 transition-transform duration-300"
+            :class="isActive(item.path) ? 'scale-105' : 'opacity-75 group-hover:opacity-100'"
+          />
+          <span class="relative z-10">{{ t(item.key) }}</span>
         </router-link>
       </nav>
 
@@ -101,7 +107,7 @@ function isActive(path) {
   <!-- Mobile Bottom Tab Bar（独立于 sticky wrapper 之外，避免 z-index 层叠上下文问题）-->
   <nav
     v-if="isLoggedIn"
-    aria-label="底部主导航"
+    :aria-label="t('nav.bottom')"
     class="md:hidden mobile-nav-glass z-[60]"
   >
     <div class="mobile-nav-inner">
@@ -120,7 +126,7 @@ function isActive(path) {
           />
         </div>
 
-        <span class="text-[10px] font-medium tracking-tight">{{ item.name }}</span>
+        <span class="text-[10px] font-medium tracking-tight">{{ t(item.key) }}</span>
       </router-link>
     </div>
   </nav>

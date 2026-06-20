@@ -1,3 +1,11 @@
+/*
+ * @Author: Rowe inetech@zohomail.com
+ * @Date: 2026-06-20 19:29:25
+ * @LastEditors: Rowe inetech@zohomail.com
+ * @LastEditTime: 2026-06-20 19:32:04
+ * @FilePath: \undefinedg:\github\MiSub\tests\unit\template-compatibility.test.js
+ * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
+ */
 import { describe, it, expect } from 'vitest';
 import {
     TEMPLATE_COMPATIBILITY,
@@ -35,11 +43,14 @@ describe('Template compatibility', () => {
         expect(TEMPLATE_COMPATIBILITY.quanx.description).toContain('Quantumult X');
     });
 
-    it('should only allow external templates for compatible clients', () => {
-        expect(shouldApplyExternalTemplateForTarget('clash', 'https://example.com/preset.yaml')).toBe(true);
+    it('should only allow built-in template rendering for compatible ini templates', () => {
+        expect(shouldApplyExternalTemplateForTarget('clash', 'https://example.com/preset.ini')).toBe(true);
         expect(shouldApplyExternalTemplateForTarget('surge&ver=4', 'https://example.com/preset.ini')).toBe(true);
         expect(shouldApplyExternalTemplateForTarget('loon', 'https://example.com/preset.ini')).toBe(true);
         expect(shouldApplyExternalTemplateForTarget('quanx', 'https://example.com/preset.ini')).toBe(true);
         expect(shouldApplyExternalTemplateForTarget('singbox', 'https://example.com/preset.ini')).toBe(true);
+        expect(shouldApplyExternalTemplateForTarget('singbox', 'https://example.com/preset.json')).toBe(false);
+        expect(shouldApplyExternalTemplateForTarget('clash', 'https://example.com/preset.ini?rev=1')).toBe(true);
+        expect(shouldApplyExternalTemplateForTarget('clash', 'https://example.com/subconverter-shellcrash-needs.yaml')).toBe(false);
     });
 });

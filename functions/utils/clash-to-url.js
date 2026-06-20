@@ -122,6 +122,11 @@ export function convertClashProxyToUrl(proxy) {
                 if (wsOpts.path) params.push(`path=${encodeURIComponent(wsOpts.path)}`);
                 if (wsOpts.headers?.Host) params.push(`host=${encodeURIComponent(wsOpts.headers.Host)}`);
             }
+            const grpcOpts = proxy.grpcOpts || proxy['grpc-opts'];
+            if (grpcOpts) {
+                if (grpcOpts['grpc-service-name']) params.push(`serviceName=${encodeURIComponent(grpcOpts['grpc-service-name'])}`);
+                if (grpcOpts['grpc-mode']) params.push(`mode=${encodeURIComponent(grpcOpts['grpc-mode'])}`);
+            }
             const httpupgradeOpts = proxy['httpupgrade-opts'] || proxy.httpupgradeOpts;
             if (httpupgradeOpts) {
                 if (httpupgradeOpts.path) params.push(`path=${encodeURIComponent(httpupgradeOpts.path)}`);
@@ -215,6 +220,8 @@ export function convertClashProxyToUrl(proxy) {
                 params.push(`alpn=${encodeURIComponent(alpn)}`);
             }
             if (proxy['skip-cert-verify']) params.push('insecure=1');
+            const pinnedPeerCertSha256 = proxy.pinnedPeerCertSha256 || proxy['pinned-peer-cert-sha256'] || proxy['peer-cert-sha256'] || proxy.certSha256;
+            if (pinnedPeerCertSha256) params.push(`pinnedPeerCertSha256=${encodeURIComponent(pinnedPeerCertSha256)}`);
             if (proxy.padding !== undefined) params.push(`padding=${proxy.padding}`);
             const query = params.length > 0 ? `?${params.join('&')}` : '';
             return `anytls://${encodeURIComponent(password)}@${server}:${port}${query}#${encodeURIComponent(name)}`;
